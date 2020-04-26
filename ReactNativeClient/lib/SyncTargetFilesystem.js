@@ -6,7 +6,6 @@ const { FileApiDriverLocal } = require('lib/file-api-driver-local.js');
 const { Synchronizer } = require('lib/synchronizer.js');
 
 class SyncTargetFilesystem extends BaseSyncTarget {
-
 	static id() {
 		return 2;
 	}
@@ -17,6 +16,10 @@ class SyncTargetFilesystem extends BaseSyncTarget {
 
 	static label() {
 		return _('File system');
+	}
+
+	static unsupportedPlatforms() {
+		return ['ios'];
 	}
 
 	async isAuthenticated() {
@@ -36,7 +39,6 @@ class SyncTargetFilesystem extends BaseSyncTarget {
 	async initSynchronizer() {
 		return new Synchronizer(this.db(), await this.fileApi(), Setting.value('appType'));
 	}
-
 }
 
 module.exports = SyncTargetFilesystem;

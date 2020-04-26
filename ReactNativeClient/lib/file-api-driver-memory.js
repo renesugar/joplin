@@ -3,7 +3,6 @@ const fs = require('fs-extra');
 const { basicDelta } = require('lib/file-api');
 
 class FileApiDriverMemory {
-
 	constructor() {
 		this.items_ = [];
 		this.deletedItems_ = [];
@@ -29,12 +28,12 @@ class FileApiDriverMemory {
 	}
 
 	itemByPath(path) {
-		let index = this.itemIndexByPath(path);
+		const index = this.itemIndexByPath(path);
 		return index < 0 ? null : this.items_[index];
 	}
 
 	newItem(path, isDir = false) {
-		let now = time.unixMs();
+		const now = time.unixMs();
 		return {
 			path: path,
 			isDir: isDir,
@@ -45,26 +44,26 @@ class FileApiDriverMemory {
 	}
 
 	stat(path) {
-		let item = this.itemByPath(path);
+		const item = this.itemByPath(path);
 		return Promise.resolve(item ? Object.assign({}, item) : null);
 	}
 
 	async setTimestamp(path, timestampMs) {
-		let item = this.itemByPath(path);
-		if (!item) return Promise.reject(new Error('File not found: ' + path));
+		const item = this.itemByPath(path);
+		if (!item) return Promise.reject(new Error(`File not found: ${path}`));
 		item.updated_time = timestampMs;
 	}
 
-	async list(path, options) {
-		let output = [];
+	async list(path) {
+		const output = [];
 
 		for (let i = 0; i < this.items_.length; i++) {
-			let item = this.items_[i];
+			const item = this.items_[i];
 			if (item.path == path) continue;
-			if (item.path.indexOf(path + '/') === 0) {
-				let s = item.path.substr(path.length + 1);
+			if (item.path.indexOf(`${path}/`) === 0) {
+				const s = item.path.substr(path.length + 1);
 				if (s.split('/').length === 1) {
-					let it = Object.assign({}, item);
+					const it = Object.assign({}, item);
 					it.path = it.path.substr(path.length + 1);
 					output.push(it);
 				}
@@ -79,9 +78,9 @@ class FileApiDriverMemory {
 	}
 
 	async get(path, options) {
-		let item = this.itemByPath(path);
+		const item = this.itemByPath(path);
 		if (!item) return Promise.resolve(null);
-		if (item.isDir) return Promise.reject(new Error(path + ' is a directory, not a file'));
+		if (item.isDir) return Promise.reject(new Error(`${path} is a directory, not a file`));
 
 		let output = null;
 		if (options.target === 'file') {
@@ -95,7 +94,7 @@ class FileApiDriverMemory {
 	}
 
 	async mkdir(path) {
-		let index = this.itemIndexByPath(path);
+		const index = this.itemIndexByPath(path);
 		if (index >= 0) return;
 		this.items_.push(this.newItem(path, true));
 	}
@@ -105,9 +104,9 @@ class FileApiDriverMemory {
 
 		if (options.source === 'file') content = await fs.readFile(options.path);
 
-		let index = this.itemIndexByPath(path);
+		const index = this.itemIndexByPath(path);
 		if (index < 0) {
-			let item = this.newItem(path, false);
+			const item = this.newItem(path, false);
 			item.content = this.encodeContent_(content);
 			this.items_.push(item);
 		} else {
@@ -117,9 +116,9 @@ class FileApiDriverMemory {
 	}
 
 	async delete(path) {
-		let index = this.itemIndexByPath(path);
+		const index = this.itemIndexByPath(path);
 		if (index >= 0) {
-			let item = Object.assign({}, this.items_[index]);
+			const item = Object.assign({}, this.items_[index]);
 			item.isDeleted = true;
 			item.updated_time = time.unixMs();
 			this.deletedItems_.push(item);
@@ -128,8 +127,8 @@ class FileApiDriverMemory {
 	}
 
 	async move(oldPath, newPath) {
-		let sourceItem = this.itemByPath(oldPath);
-		if (!sourceItem) return Promise.reject(new Error('Path not found: ' + oldPath));
+		const sourceItem = this.itemByPath(oldPath);
+		if (!sourceItem) return Promise.reject(new Error(`Path not found: ${oldPath}`));
 		this.delete(newPath); // Overwrite if newPath already exists
 		sourceItem.path = newPath;
 	}
@@ -139,8 +138,8 @@ class FileApiDriverMemory {
 	}
 
 	async delta(path, options = null) {
-		const getStatFn = async (path) => {
-			let output = this.items_.slice();
+		const getStatFn = async path => {
+			const output = this.items_.slice();
 			for (let i = 0; i < output.length; i++) {
 				const item = Object.assign({}, output[i]);
 				item.path = item.path.substr(path.length + 1);
@@ -156,7 +155,6 @@ class FileApiDriverMemory {
 	async clearRoot() {
 		this.items_ = [];
 	}
-
 }
 
 module.exports = { FileApiDriverMemory };

@@ -1,8 +1,7 @@
 class SyncTargetRegistry {
-
 	static classById(syncTargetId) {
 		const info = SyncTargetRegistry.reg_[syncTargetId];
-		if (!info) throw new Error('Invalid id: ' + syncTargetId);
+		if (!info) throw new Error(`Invalid id: ${syncTargetId}`);
 		return info.classRef;
 	}
 
@@ -17,34 +16,37 @@ class SyncTargetRegistry {
 	}
 
 	static nameToId(name) {
-		for (let n in this.reg_) {
+		for (const n in this.reg_) {
 			if (!this.reg_.hasOwnProperty(n)) continue;
 			if (this.reg_[n].name === name) return this.reg_[n].id;
 		}
-		throw new Error('Name not found: ' + name);
+		throw new Error(`Name not found: ${name}`);
 	}
 
 	static idToMetadata(id) {
-		for (let n in this.reg_) {
+		for (const n in this.reg_) {
 			if (!this.reg_.hasOwnProperty(n)) continue;
 			if (this.reg_[n].id === id) return this.reg_[n];
 		}
-		throw new Error('ID not found: ' + id);
+		throw new Error(`ID not found: ${id}`);
 	}
 
 	static idToName(id) {
 		return this.idToMetadata(id).name;
 	}
 
-	static idAndLabelPlainObject() {
-		let output = {};
-		for (let n in this.reg_) {
+	static idAndLabelPlainObject(os) {
+		const output = {};
+		for (const n in this.reg_) {
 			if (!this.reg_.hasOwnProperty(n)) continue;
-			output[n] = this.reg_[n].label;
+			const info = this.reg_[n];
+			if (info.classRef.unsupportedPlatforms().indexOf(os) >= 0) {
+				continue;
+			}
+			output[n] = info.label;
 		}
 		return output;
 	}
-
 }
 
 SyncTargetRegistry.reg_ = {};

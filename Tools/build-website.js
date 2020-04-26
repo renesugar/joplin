@@ -1,19 +1,32 @@
 const fs = require('fs-extra');
 const dirname = require('path').dirname;
-const marked = require('marked');
 const Mustache = require('mustache');
 
 const headerHtml = `<!doctype html>
 <html>
+
+<!--
+
+!!! WARNING !!!
+
+This file was auto-generated from {{{sourceMarkdownFile}}} and any manual change
+made to it will be overwritten. To make a change to this file please modify
+the source Markdown file:
+
+https://github.com/laurent22/joplin/blob/master/{{{sourceMarkdownFile}}}
+
+-->
+
 <head>
 	<title>{{pageTitle}}</title>
 	<meta charset="utf-8">
 	<meta http-equiv="X-UA-Compatible" content="IE=edge">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<link rel="stylesheet" href="https://joplin.cozic.net/css/bootstrap.min.css">
+	<link rel="stylesheet" href="https://joplinapp.org/css/bootstrap.min.css">
 	<link rel="shortcut icon" type="image/x-icon" href="favicon.ico">
-	<link rel="stylesheet" href="https://joplin.cozic.net/css/fontawesome-all.min.css"> 
-	<script src="https://joplin.cozic.net/js/jquery-3.2.1.slim.min.js"></script>
+	<!-- <link rel="stylesheet" href="https://joplinapp.org/css/fontawesome-all.min.css">  -->
+	<link rel="stylesheet" href="https://joplinapp.org/css/fork-awesome.min.css"> 
+	<script src="https://joplinapp.org/js/jquery-3.2.1.slim.min.js"></script>
 	<style>
 	body {
 		background-color: #F1F1F1;
@@ -26,6 +39,24 @@ const headerHtml = `<!doctype html>
 		padding: .8em;
 		border: 1px solid #ccc;
 	}
+
+	.page-markdown table pre,
+	.page-markdown table blockquote {
+		margin-bottom: 0;
+	}
+
+	.page-markdown table pre,
+	.page-markdown table blockquote {
+		margin-bottom: 0;
+	}
+
+	.page-markdown table pre {
+		background-color: rgba(0,0,0,0);
+		border: none;
+		margin: 0;
+		padding: 0;
+	}
+
 	h1, h2 {
 		border-bottom: 1px solid #eaecef;
 		padding-bottom: 0.3em;
@@ -52,18 +83,32 @@ const headerHtml = `<!doctype html>
 	pre {
 		font-size: .85em;
 	}
+	blockquote {
+		font-size: 1em;
+		color: #555;
+	};
 	#toc ul {
 		margin-bottom: 10px;
 	}
 	#toc {
 		padding-bottom: 1em;
 	}
+	.title {
+		display: flex;
+		align-items: center;
+	}
 	.title-icon {
-		height: 2em;
+		display: flex;
+		height: 1em;
+	}
+	.title-text {
+		display: flex;
+		font-weight: normal;
+		margin-bottom: .2em;
+		margin-left: .5em;
 	}
 	.sub-title {
-		font-weight: bold;
-		font-size: 1.5em;
+		font-weight: normal;
 	}
 	.container {
 		background-color: white;
@@ -120,6 +165,9 @@ const headerHtml = `<!doctype html>
 	.header a h1 {
 		color: white;
 	}
+	.header a:hover {
+		text-decoration: none;
+	}
 	.content {
 		padding-left: 2em;
 		padding-right: 2em;
@@ -155,7 +203,9 @@ const headerHtml = `<!doctype html>
 		padding-left: 2em;
 		margin-bottom: 0;
 		display: table-cell;
-		min-width: 250px;
+		/* min-width: 250px; */
+		/* For GSoC: */
+		min-width: 470px;
 	}
 	.nav ul li {
 		display: inline-block;
@@ -185,6 +235,34 @@ const headerHtml = `<!doctype html>
 		color: gray;
 		font-size: .9em;
 	}
+	a.heading-anchor {
+		display: inline-block;
+		opacity: 0;
+		width: 1.3em;
+		font-size: 0.7em;
+		margin-left: 0.4em;
+		line-height: 1em;
+		text-decoration: none;
+		transition: opacity 0.3s;
+	}
+	a.heading-anchor:hover,
+	h1:hover a.heading-anchor,
+	h2:hover a.heading-anchor,
+	h3:hover a.heading-anchor,
+	h4:hover a.heading-anchor,
+	h5:hover a.heading-anchor,
+	h6:hover a.heading-anchor {
+		opacity: 1;
+	}
+
+	.bottom-links {
+		display: flex;
+		justify-content: center;
+		border-top: 1px solid #d4d4d4;
+		margin-top: 30px;
+		padding-top: 25px;
+	}
+
 	@media all and (min-width: 400px) {
 		.nav-right .share-btn {
 			display: inline-block;
@@ -198,25 +276,26 @@ const headerHtml = `<!doctype html>
 
 <body>
 
-<div class="container">
+<div class="container page-{{sourceMarkdownName}}">
 
 <div class="header">
 	<a class="forkme" href="https://github.com/laurent22/joplin"><img src="{{{imageBaseUrl}}}/ForkMe.png"/></a>
-	<a href="https://joplin.cozic.net"><h1 id="joplin"><img class="title-icon" src="{{{imageBaseUrl}}}/Icon512.png">oplin</h1></a>
-	<p class="sub-title">An open source note taking and to-do application with synchronisation capabilities.</p>
+	<a href="https://joplinapp.org"><h1 class="title"><img class="title-icon" src="{{{imageBaseUrl}}}/Icon512.png"><span class="title-text">Joplin</span></h1></a>
+	<p class="sub-title">An open source note taking and to-do application with synchronisation capabilities</p>
 </div>
 
 <div class="nav-wrapper">
 	<div class="nav">
 		<ul>
 			<li class="{{selectedHome}}"><a href="{{baseUrl}}/" title="Home"><i class="fa fa-home"></i></a></li>
-			<li><a href="https://discourse.joplin.cozic.net" title="Forum">Forum</a></li>
+			<li><a href="https://discourse.joplinapp.org" title="Forum">Forum</a></li>
 			<li><a class="help" href="#" title="Menu">Menu</a></li>
+			<li><a class="gsoc" href="https://joplinapp.org/gsoc2020/" title="Google Summer of Code 2020">GSoC 2020</a></li>
 		</ul>
 		<div class="nav-right">
 			<!--
-				<iframe class="share-btn" src="https://www.facebook.com/plugins/share_button.php?href=http%3A%2F%2Fjoplin.cozic.net&layout=button&size=small&mobile_iframe=true&width=60&height=20&appId" width="60" height="20" style="border:none;overflow:hidden" scrolling="no" frameborder="0" allowTransparency="true"></iframe>
-				<iframe class="share-btn" src="https://platform.twitter.com/widgets/tweet_button.html?url=http%3A%2F%2Fjoplin.cozic.net" width="62" height="20" title="Tweet" style="border: 0; overflow: hidden;"></iframe>
+				<iframe class="share-btn" src="https://www.facebook.com/plugins/share_button.php?href=http%3A%2F%2Fjoplinapp.org&layout=button&size=small&mobile_iframe=true&width=60&height=20&appId" width="60" height="20" style="border:none;overflow:hidden" scrolling="no" frameborder="0" allowTransparency="true"></iframe>
+				<iframe class="share-btn" src="https://platform.twitter.com/widgets/tweet_button.html?url=http%3A%2F%2Fjoplinapp.org" width="62" height="20" title="Tweet" style="border: 0; overflow: hidden;"></iframe>
 			-->
 			<iframe class="share-btn share-btn-github" src="https://ghbtns.com/github-btn.html?user=laurent22&repo=joplin&type=star&count=true" frameborder="0" scrolling="0" width="100px" height="20px"></iframe>
 		</div>
@@ -227,13 +306,15 @@ const headerHtml = `<!doctype html>
 	{{{tocHtml}}}
 `;
 
-const footerHtml = `
+const footerHtmlTemplate = `
 <div class="footer">
-Copyright (c) 2016-2019 Laurent Cozic
+Copyright (c) 2016-YYYY Laurent Cozic
 </div>
 </body>
 </html>
 `;
+
+const footerHtml = footerHtmlTemplate.replace('YYYY', new Date().getFullYear());
 
 // const screenshotHtml = `
 // <table class="screenshots">
@@ -304,27 +385,127 @@ const scriptHtml = `
 
 const rootDir = dirname(__dirname);
 
-function markdownToHtml(md) {
-	const renderer = new marked.Renderer();
+function markdownToHtml(md, templateParams) {
+	const MarkdownIt = require('markdown-it');
 
-	let output = marked(md, {
-		gfm: true,
-		break: true,
-		renderer: renderer,
+	const markdownIt = new MarkdownIt({
+		breaks: true,
+		linkify: true,
+		html: true,
 	});
 
-	return headerHtml + output + scriptHtml + footerHtml;
+	markdownIt.core.ruler.push('checkbox', state => {
+		const tokens = state.tokens;
+		const Token = state.Token;
+		const doneNames = [];
+
+		const headingTextToAnchorName = (text, doneNames) => {
+			const allowed = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+			let lastWasDash = true;
+			let output = '';
+			for (let i = 0; i < text.length; i++) {
+				const c = text[i];
+				if (allowed.indexOf(c) < 0) {
+					if (lastWasDash) continue;
+					lastWasDash = true;
+					output += '-';
+				} else {
+					lastWasDash = false;
+					output += c;
+				}
+			}
+
+			output = output.toLowerCase();
+
+			while (output.length && output[output.length - 1] === '-') {
+				output = output.substr(0, output.length - 1);
+			}
+
+			let temp = output;
+			let index = 1;
+			while (doneNames.indexOf(temp) >= 0) {
+				temp = `${output}-${index}`;
+				index++;
+			}
+			output = temp;
+
+			return output;
+		};
+
+		const createAnchorTokens = anchorName => {
+			const output = [];
+
+			{
+				const token = new Token('heading_anchor_open', 'a', 1);
+				token.attrs = [
+					['name', anchorName],
+					['href', `#${anchorName}`],
+					['class', 'heading-anchor'],
+				];
+				output.push(token);
+			}
+
+			{
+				const token = new Token('text', '', 0);
+				token.content = '🔗';
+				output.push(token);
+			}
+
+			{
+				const token = new Token('heading_anchor_close', 'a', -1);
+				output.push(token);
+			}
+
+			return output;
+		};
+
+		let insideHeading = false;
+		for (let i = 0; i < tokens.length; i++) {
+			const token = tokens[i];
+
+			if (token.type === 'heading_open') {
+				insideHeading = true;
+				continue;
+			}
+
+			if (token.type === 'heading_close') {
+				insideHeading = false;
+				continue;
+			}
+
+			if (insideHeading && token.type === 'inline') {
+				const anchorName = headingTextToAnchorName(token.content, doneNames);
+				doneNames.push(anchorName);
+				const anchorTokens = createAnchorTokens(anchorName);
+				// token.children = anchorTokens.concat(token.children);
+				token.children = token.children.concat(anchorTokens);
+			}
+		}
+	});
+
+	const improveDocHtml = `
+		<div class="bottom-links">
+			<a href="https://github.com/laurent22/joplin/blob/master/{{{sourceMarkdownFile}}}">
+				<i class="fa fa-github"></i> Improve this doc
+			</a>
+		</div>`;
+
+	return Mustache.render(headerHtml, templateParams) + markdownIt.render(md) + Mustache.render(improveDocHtml, templateParams) + scriptHtml + footerHtml;
 }
 
 let tocMd_ = null;
 let tocHtml_ = null;
-const tocRegex_ = /<!-- TOC -->([^]*)<!-- TOC -->/
+const tocRegex_ = /<!-- TOC -->([^]*)<!-- TOC -->/;
 function tocMd() {
 	if (tocMd_) return tocMd_;
-	const md = fs.readFileSync(rootDir + '/README.md', 'utf8');
+	const md = fs.readFileSync(`${rootDir}/README.md`, 'utf8');
 	const toc = md.match(tocRegex_);
 	tocMd_ = toc[1];
 	return tocMd_;
+}
+
+function replaceGitHubByJoplinAppLinks(md) {
+	return md.replace(/https:\/\/github.com\/laurent22\/joplin\/blob\/master\/readme\/(.*)\.md(#[^\s)]+|)/g, 'https://joplinapp.org/$1/$2');
 }
 
 function tocHtml() {
@@ -333,63 +514,86 @@ function tocHtml() {
 	const markdownIt = new MarkdownIt();
 	let md = tocMd();
 	md = md.replace(/# Table of contents/, '');
-	md = md.replace(/https:\/\/github.com\/laurent22\/joplin\/blob\/master\/readme\/(.*)\.md/g, 'https://joplin.cozic.net/$1');
+	md = replaceGitHubByJoplinAppLinks(md);
 	tocHtml_ = markdownIt.render(md);
-	tocHtml_ = '<div id="toc">' + tocHtml_ + '</div>';
+	tocHtml_ = `<div id="toc">${tocHtml_}</div>`;
 	return tocHtml_;
 }
 
-function renderMdToHtml(md, targetPath, params) {
+function renderMdToHtml(md, targetPath, templateParams) {
 	// Remove the header because it's going to be added back as HTML
 	md = md.replace(/# Joplin\n/, '');
 
-	params.baseUrl = 'https://joplin.cozic.net';
-	params.imageBaseUrl = params.baseUrl + '/images';
-	params.tocHtml = tocHtml();
+	templateParams.baseUrl = 'https://joplinapp.org';
+	templateParams.imageBaseUrl = `${templateParams.baseUrl}/images`;
+	templateParams.tocHtml = tocHtml();
 
 	const title = [];
 
-	if (!params.title) {
+	if (!templateParams.title) {
 		title.push('Joplin - an open source note taking and to-do application with synchronisation capabilities');
 	} else {
-		title.push(params.title);
+		title.push(templateParams.title);
 		title.push('Joplin');
 	}
 
-	params.pageTitle = title.join(' | ');
-	const html = Mustache.render(markdownToHtml(md), params);
+	md = replaceGitHubByJoplinAppLinks(md);
+
+	templateParams.pageTitle = title.join(' | ');
+	const html = markdownToHtml(md, templateParams);
 	fs.writeFileSync(targetPath, html);
 }
 
-function renderFileToHtml(sourcePath, targetPath, params) {
+function renderFileToHtml(sourcePath, targetPath, templateParams) {
 	const md = fs.readFileSync(sourcePath, 'utf8');
-	return renderMdToHtml(md, targetPath, params);
+	return renderMdToHtml(md, targetPath, templateParams);
 }
 
 function makeHomePageMd() {
-	let md = fs.readFileSync(rootDir + '/README.md', 'utf8');
+	let md = fs.readFileSync(`${rootDir}/README.md`, 'utf8');
 	md = md.replace(tocRegex_, '');
+
+	// HACK: GitHub needs the \| or the inline code won't be displayed correctly inside the table,
+	// while MarkdownIt doesn't and will in fact display the \. So we remove it here.
+	md = md.replace(/\\\| bash/g, '| bash');
+
 	return md;
 }
 
 async function main() {
 	tocMd();
 
-	renderMdToHtml(makeHomePageMd(), rootDir + '/docs/index.html', {});
+	renderMdToHtml(makeHomePageMd(), `${rootDir}/docs/index.html`, { sourceMarkdownFile: 'README.md' });
 
-	renderFileToHtml(rootDir + '/readme/changelog.md', rootDir + '/docs/changelog/index.html', { title: 'Changelog' });
-	renderFileToHtml(rootDir + '/readme/clipper.md', rootDir + '/docs/clipper/index.html', { title: 'Web Clipper' });
-	renderFileToHtml(rootDir + '/readme/debugging.md', rootDir + '/docs/debugging/index.html', { title: 'Debugging' });
-	renderFileToHtml(rootDir + '/readme/desktop.md', rootDir + '/docs/desktop/index.html', { title: 'Desktop Application' });
-	renderFileToHtml(rootDir + '/readme/donate.md', rootDir + '/docs/donate/index.html', { title: 'Donate' });
-	renderFileToHtml(rootDir + '/readme/e2ee.md', rootDir + '/docs/e2ee/index.html', { title: 'End-To-End Encryption' });
-	renderFileToHtml(rootDir + '/readme/faq.md', rootDir + '/docs/faq/index.html', { title: 'FAQ' });
-	renderFileToHtml(rootDir + '/readme/mobile.md', rootDir + '/docs/mobile/index.html', { title: 'Mobile Application' });
-	renderFileToHtml(rootDir + '/readme/spec.md', rootDir + '/docs/spec/index.html', { title: 'Specifications' });
-	renderFileToHtml(rootDir + '/readme/stats.md', rootDir + '/docs/stats/index.html', { title: 'Statistics' });
-	renderFileToHtml(rootDir + '/readme/terminal.md', rootDir + '/docs/terminal/index.html', { title: 'Terminal Application' });
-	renderFileToHtml(rootDir + '/readme/api.md', rootDir + '/docs/api/index.html', { title: 'REST API' });
-	renderFileToHtml(rootDir + '/readme/prereleases.md', rootDir + '/docs/prereleases/index.html', { title: 'Pre-releases' });
+	const sources = [
+		['readme/changelog.md', 'docs/changelog/index.html', { title: 'Changelog (Desktop App)' }],
+		['readme/changelog_cli.md', 'docs/changelog_cli/index.html', { title: 'Changelog (CLI App)' }],
+		['readme/clipper.md', 'docs/clipper/index.html', { title: 'Web Clipper' }],
+		['readme/debugging.md', 'docs/debugging/index.html', { title: 'Debugging' }],
+		['readme/desktop.md', 'docs/desktop/index.html', { title: 'Desktop Application' }],
+		['readme/donate.md', 'docs/donate/index.html', { title: 'Donate' }],
+		['readme/e2ee.md', 'docs/e2ee/index.html', { title: 'End-To-End Encryption' }],
+		['readme/faq.md', 'docs/faq/index.html', { title: 'FAQ' }],
+		['readme/mobile.md', 'docs/mobile/index.html', { title: 'Mobile Application' }],
+		['readme/spec.md', 'docs/spec/index.html', { title: 'Specifications' }],
+		['readme/stats.md', 'docs/stats/index.html', { title: 'Statistics' }],
+		['readme/terminal.md', 'docs/terminal/index.html', { title: 'Terminal Application' }],
+		['readme/api.md', 'docs/api/index.html', { title: 'REST API' }],
+		['readme/prereleases.md', 'docs/prereleases/index.html', { title: 'Pre-releases' }],
+		['readme/markdown.md', 'docs/markdown/index.html', { title: 'Markdown Guide' }],
+		['readme/nextcloud_app.md', 'docs/nextcloud_app/index.html', { title: 'Joplin Web API for Nextcloud' }],
+
+		['readme/gsoc2020/index.md', 'docs/gsoc2020/index.html', { title: 'Google Summer of Code' }],
+		['readme/gsoc2020/ideas.md', 'docs/gsoc2020/ideas.html', { title: 'GSoC: Project Ideas' }],
+	];
+
+	const path = require('path');
+
+	for (const source of sources) {
+		source[2].sourceMarkdownFile = source[0];
+		source[2].sourceMarkdownName = path.basename(source[0], path.extname(source[0]));
+		renderFileToHtml(`${rootDir}/${source[0]}`, `${rootDir}/${source[1]}`, source[2]);
+	}
 }
 
 main().catch((error) => {

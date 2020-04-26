@@ -1,12 +1,11 @@
-const ArrayUtils = require('lib/ArrayUtils');
 const Folder = require('lib/models/Folder');
 const BaseModel = require('lib/BaseModel');
 
-let shared = {};
+const shared = {};
 
 function folderHasChildren_(folders, folderId) {
 	for (let i = 0; i < folders.length; i++) {
-		let folder = folders[i];
+		const folder = folders[i];
 		if (folder.parent_id === folderId) return true;
 	}
 	return false;
@@ -16,20 +15,18 @@ function folderIsVisible(folders, folderId, collapsedFolderIds) {
 	if (!collapsedFolderIds || !collapsedFolderIds.length) return true;
 
 	while (true) {
-		let folder = BaseModel.byId(folders, folderId);
-		if (!folder) throw new Error('No folder with id ' + folder.id);
+		const folder = BaseModel.byId(folders, folderId);
+		if (!folder) throw new Error(`No folder with id ${folder.id}`);
 		if (!folder.parent_id) return true;
 		if (collapsedFolderIds.indexOf(folder.parent_id) >= 0) return false;
 		folderId = folder.parent_id;
 	}
-
-	return true;
 }
 
 function renderFoldersRecursive_(props, renderItem, items, parentId, depth, order) {
 	const folders = props.folders;
 	for (let i = 0; i < folders.length; i++) {
-		let folder = folders[i];
+		const folder = folders[i];
 		if (!Folder.idsEqual(folder.parent_id, parentId)) continue;
 		if (!folderIsVisible(props.folders, folder.id, props.collapsedFolderIds)) continue;
 		const hasChildren = folderHasChildren_(folders, folder.id);
@@ -49,12 +46,14 @@ function renderFoldersRecursive_(props, renderItem, items, parentId, depth, orde
 
 shared.renderFolders = function(props, renderItem) {
 	return renderFoldersRecursive_(props, renderItem, [], '', 0, []);
-}
+};
 
 shared.renderTags = function(props, renderItem) {
-	let tags = props.tags.slice();
-	tags.sort((a, b) => { return a.title < b.title ? -1 : +1; });
-	let tagItems = [];
+	const tags = props.tags.slice();
+	tags.sort((a, b) => {
+		return a.title < b.title ? -1 : +1;
+	});
+	const tagItems = [];
 	const order = [];
 	for (let i = 0; i < tags.length; i++) {
 		const tag = tags[i];
@@ -65,7 +64,7 @@ shared.renderTags = function(props, renderItem) {
 		items: tagItems,
 		order: order,
 	};
-}
+};
 
 // shared.renderSearches = function(props, renderItem) {
 // 	let searches = props.searches.slice();
@@ -83,12 +82,11 @@ shared.renderTags = function(props, renderItem) {
 // }
 
 shared.synchronize_press = async function(comp) {
-	const Setting = require('lib/models/Setting.js');
 	const { reg } = require('lib/registry.js');
 
 	const action = comp.props.syncStarted ? 'cancel' : 'start';
 
-	if (!await reg.syncTarget().isAuthenticated()) {
+	if (!(await reg.syncTarget().isAuthenticated())) {
 		if (reg.syncTarget().authRouteName()) {
 			comp.props.dispatch({
 				type: 'NAV_GO',
@@ -117,6 +115,6 @@ shared.synchronize_press = async function(comp) {
 		reg.scheduleSync(0);
 		return 'sync';
 	}
-}
+};
 
 module.exports = shared;

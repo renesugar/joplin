@@ -5,30 +5,29 @@ const { Keyboard } = require('react-native');
 //
 // <DialogBox ref={dialogbox => { this.dialogbox = dialogbox }}/>
 
-let dialogs = {};
+const dialogs = {};
 
 dialogs.confirm = (parentComponent, message) => {
 	if (!parentComponent) throw new Error('parentComponent is required');
 	if (!('dialogbox' in parentComponent)) throw new Error('A "dialogbox" component must be defined on the parent component!');
 
-	return new Promise((resolve, reject) => {
+	return new Promise((resolve) => {
 		Keyboard.dismiss();
 
 		parentComponent.dialogbox.confirm({
 			content: message,
-			
+
 			ok: {
 				callback: () => {
 					resolve(true);
-				}
+				},
 			},
 
 			cancel: {
 				callback: () => {
 					resolve(false);
-				}
+				},
 			},
-
 		});
 	});
 };
@@ -40,10 +39,10 @@ dialogs.pop = (parentComponent, message, buttons, options = null) => {
 	if (!options) options = {};
 	if (!('buttonFlow' in options)) options.buttonFlow = 'auto';
 
-	return new Promise((resolve, reject) => {
+	return new Promise((resolve) => {
 		Keyboard.dismiss();
 
-		let btns = [];
+		const btns = [];
 		for (let i = 0; i < buttons.length; i++) {
 			btns.push({
 				text: buttons[i].text,
@@ -55,23 +54,23 @@ dialogs.pop = (parentComponent, message, buttons, options = null) => {
 		}
 
 		parentComponent.dialogbox.pop({
-			content: message, 
+			content: message,
 			btns: btns,
 			buttonFlow: options.buttonFlow,
 		});
 	});
-}
+};
 
 dialogs.error = (parentComponent, message) => {
 	Keyboard.dismiss();
 	return parentComponent.dialogbox.alert(message);
-}
+};
 
 dialogs.info = (parentComponent, message) => {
 	Keyboard.dismiss();
 	return parentComponent.dialogbox.alert(message);
-}
+};
 
-dialogs.DialogBox = DialogBox
+dialogs.DialogBox = DialogBox;
 
 module.exports = { dialogs };

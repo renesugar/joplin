@@ -1,12 +1,10 @@
 const { BaseCommand } = require('./base-command.js');
-const { Database } = require('lib/database.js');
 const { app } = require('./app.js');
 const Setting = require('lib/models/Setting.js');
 const { _ } = require('lib/locale.js');
 const { ReportService } = require('lib/services/report.js');
 
 class Command extends BaseCommand {
-
 	usage() {
 		return 'status';
 	}
@@ -15,29 +13,41 @@ class Command extends BaseCommand {
 		return _('Displays summary about the notes and notebooks.');
 	}
 
-	async action(args) {
-		let service = new ReportService();
-		let report = await service.status(Setting.value('sync.target'));
+	async action() {
+		const service = new ReportService();
+		const report = await service.status(Setting.value('sync.target'));
 
 		for (let i = 0; i < report.length; i++) {
-			let section = report[i];
+			const section = report[i];
 
 			if (i > 0) this.stdout('');
 
-			this.stdout('# ' + section.title);
+			this.stdout(`# ${section.title}`);
 			this.stdout('');
 
-			for (let n in section.body) {
+			let canRetryType = '';
+
+			for (const n in section.body) {
 				if (!section.body.hasOwnProperty(n)) continue;
-				let line = section.body[n];
-				this.stdout(line);
+				const item = section.body[n];
+
+				if (typeof item === 'object') {
+					canRetryType = item.canRetryType;
+					this.stdout(item.text);
+				} else {
+					this.stdout(item);
+				}
+			}
+
+			if (canRetryType === 'e2ee') {
+				this.stdout('');
+				this.stdout(_('To retry decryption of these items. Run `e2ee decrypt --retry-failed-items`'));
 			}
 		}
 
 		app().gui().showConsole();
 		app().gui().maximizeConsole();
 	}
-
 }
 
 module.exports = Command;

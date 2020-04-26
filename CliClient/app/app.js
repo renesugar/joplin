@@ -1,10 +1,5 @@
 const { BaseApplication } = require('lib/BaseApplication');
-const { createStore, applyMiddleware } = require('redux');
-const { reducer, defaultState } = require('lib/reducer.js');
-const { JoplinDatabase } = require('lib/joplin-database.js');
-const { Database } = require('lib/database.js');
 const { FoldersScreenUtils } = require('lib/folders-screen-utils.js');
-const { DatabaseDriverNode } = require('lib/database-driver-node.js');
 const ResourceService = require('lib/services/ResourceService');
 const BaseModel = require('lib/BaseModel.js');
 const Folder = require('lib/models/Folder.js');
@@ -12,20 +7,15 @@ const BaseItem = require('lib/models/BaseItem.js');
 const Note = require('lib/models/Note.js');
 const Tag = require('lib/models/Tag.js');
 const Setting = require('lib/models/Setting.js');
-const { Logger } = require('lib/logger.js');
-const { sprintf } = require('sprintf-js');
 const { reg } = require('lib/registry.js');
 const { fileExtension } = require('lib/path-utils.js');
-const { shim } = require('lib/shim.js');
-const { _, setLocale, defaultLocale, closestSupportedLocale } = require('lib/locale.js');
-const os = require('os');
+const { _ } = require('lib/locale.js');
 const fs = require('fs-extra');
 const { cliUtils } = require('./cli-utils.js');
 const Cache = require('lib/Cache');
-const WelcomeUtils = require('lib/WelcomeUtils');
+const RevisionService = require('lib/services/RevisionService');
 
 class Application extends BaseApplication {
-
 	constructor() {
 		super();
 
@@ -57,7 +47,7 @@ class Application extends BaseApplication {
 	}
 
 	async loadItem(type, pattern, options = null) {
-		let output = await this.loadItems(type, pattern, options);
+		const output = await this.loadItems(type, pattern, options);
 
 		if (output.length > 1) {
 			// output.sort((a, b) => { return a.user_updated_time < b.user_updated_time ? +1 : -1; });
@@ -74,7 +64,7 @@ class Application extends BaseApplication {
 			// const response = await cliUtils.promptMcq(msg, answers);
 			// if (!response) return null;
 
-			return output[response - 1];
+			// return output[response - 1];
 		} else {
 			return output.length ? output[0] : null;
 		}
@@ -96,10 +86,12 @@ class Application extends BaseApplication {
 		const parent = options.parent ? options.parent : app().currentFolder();
 		const ItemClass = BaseItem.itemClass(type);
 
-		if (type == BaseModel.TYPE_NOTE && pattern.indexOf('*') >= 0) { // Handle it as pattern
+		if (type == BaseModel.TYPE_NOTE && pattern.indexOf('*') >= 0) {
+			// Handle it as pattern
 			if (!parent) throw new Error(_('No notebook selected.'));
 			return await Note.previews(parent.id, { titlePattern: pattern });
-		} else { // Single item
+		} else {
+			// Single item
 			let item = null;
 			if (type == BaseModel.TYPE_NOTE) {
 				if (!parent) throw new Error(_('No notebook has been specified.'));
@@ -125,15 +117,15 @@ class Application extends BaseApplication {
 	}
 
 	setupCommand(cmd) {
-		cmd.setStdout((text) => {
+		cmd.setStdout(text => {
 			return this.stdout(text);
 		});
 
-		cmd.setDispatcher((action) => {
+		cmd.setDispatcher(action => {
 			if (this.store()) {
 				return this.store().dispatch(action);
 			} else {
-				return (action) => {};
+				return () => {};
 			}
 		});
 
@@ -144,15 +136,15 @@ class Application extends BaseApplication {
 			if (!options.answers) options.answers = options.booleanAnswerDefault === 'y' ? [_('Y'), _('n')] : [_('N'), _('y')];
 
 			if (options.type == 'boolean') {
-				message += ' (' + options.answers.join('/') + ')';
+				message += ` (${options.answers.join('/')})`;
 			}
 
-			let answer = await this.gui().prompt('', message + ' ', options);
+			let answer = await this.gui().prompt('', `${message} `, options);
 
 			if (options.type === 'boolean') {
 				if (answer === null) return false; // Pressed ESCAPE
 				if (!answer) answer = options.answers[0];
-				let positiveIndex = options.booleanAnswerDefault == 'y' ? 0 : 1;
+				const positiveIndex = options.booleanAnswerDefault == 'y' ? 0 : 1;
 				return answer.toLowerCase() === options.answers[positiveIndex].toLowerCase();
 			} else {
 				return answer;
@@ -184,12 +176,12 @@ class Application extends BaseApplication {
 
 	commands(uiType = null) {
 		if (!this.allCommandsLoaded_) {
-			fs.readdirSync(__dirname).forEach((path) => {
+			fs.readdirSync(__dirname).forEach(path => {
 				if (path.indexOf('command-') !== 0) return;
-				const ext = fileExtension(path)
+				const ext = fileExtension(path);
 				if (ext != 'js') return;
 
-				let CommandClass = require('./' + path);
+				const CommandClass = require(`./${path}`);
 				let cmd = new CommandClass();
 				if (!cmd.enabled()) return;
 				cmd = this.setupCommand(cmd);
@@ -200,8 +192,8 @@ class Application extends BaseApplication {
 		}
 
 		if (uiType !== null) {
-			let temp = [];
-			for (let n in this.commands_) {
+			const temp = [];
+			for (const n in this.commands_) {
 				if (!this.commands_.hasOwnProperty(n)) continue;
 				const c = this.commands_[n];
 				if (!c.supportsUi(uiType)) continue;
@@ -215,8 +207,8 @@ class Application extends BaseApplication {
 
 	async commandNames() {
 		const metadata = await this.commandMetadata();
-		let output = [];
-		for (let n in metadata) {
+		const output = [];
+		for (const n in metadata) {
 			if (!metadata.hasOwnProperty(n)) continue;
 			output.push(n);
 		}
@@ -235,7 +227,7 @@ class Application extends BaseApplication {
 		const commands = this.commands();
 
 		output = {};
-		for (let n in commands) {
+		for (const n in commands) {
 			if (!commands.hasOwnProperty(n)) continue;
 			const cmd = commands[n];
 			output[n] = cmd.metadata();
@@ -256,10 +248,10 @@ class Application extends BaseApplication {
 
 		let CommandClass = null;
 		try {
-			CommandClass = require(__dirname + '/command-' + name + '.js');
+			CommandClass = require(`${__dirname}/command-${name}.js`);
 		} catch (error) {
 			if (error.message && error.message.indexOf('Cannot find module') >= 0) {
-				let e = new Error(_('No such command: %s', name));
+				const e = new Error(_('No such command: %s', name));
 				e.type = 'notFound';
 				throw e;
 			} else {
@@ -275,19 +267,27 @@ class Application extends BaseApplication {
 
 	dummyGui() {
 		return {
-			isDummy: () => { return true; },
-			prompt: (initialText = '', promptString = '', options = null) => { return cliUtils.prompt(initialText, promptString, options); },
+			isDummy: () => {
+				return true;
+			},
+			prompt: (initialText = '', promptString = '', options = null) => {
+				return cliUtils.prompt(initialText, promptString, options);
+			},
 			showConsole: () => {},
 			maximizeConsole: () => {},
-			stdout: (text) => { console.info(text); },
-			fullScreen: (b=true) => {},
+			stdout: text => {
+				console.info(text);
+			},
+			fullScreen: () => {},
 			exit: () => {},
-			showModalOverlay: (text) => {},
+			showModalOverlay: () => {},
 			hideModalOverlay: () => {},
-			stdoutMaxWidth: () => { return 100; },
+			stdoutMaxWidth: () => {
+				return 100;
+			},
 			forceRender: () => {},
 			termSaveState: () => {},
-			termRestoreState: (state) => {},
+			termRestoreState: () => {},
 		};
 	}
 
@@ -299,7 +299,7 @@ class Application extends BaseApplication {
 
 		let outException = null;
 		try {
-			if (this.gui().isDummy() && !this.activeCommand_.supportsUi('cli')) throw new Error(_('The command "%s" is only available in GUI mode', this.activeCommand_.name()));			
+			if (this.gui().isDummy() && !this.activeCommand_.supportsUi('cli')) throw new Error(_('The command "%s" is only available in GUI mode', this.activeCommand_.name()));
 			const cmdArgs = cliUtils.makeCommandArgs(this.activeCommand_, argv);
 			await this.activeCommand_.action(cmdArgs);
 		} catch (error) {
@@ -315,24 +315,24 @@ class Application extends BaseApplication {
 
 	async loadKeymaps() {
 		const defaultKeyMap = [
-			{ "keys": [":"], "type": "function", "command": "enter_command_line_mode" },
-			{ "keys": ["TAB"], "type": "function", "command": "focus_next" },
-			{ "keys": ["SHIFT_TAB"], "type": "function", "command": "focus_previous" },
-			{ "keys": ["UP"], "type": "function", "command": "move_up" },
-			{ "keys": ["DOWN"], "type": "function", "command": "move_down" },
-			{ "keys": ["PAGE_UP"], "type": "function", "command": "page_up" },
-			{ "keys": ["PAGE_DOWN"], "type": "function", "command": "page_down" },
-			{ "keys": ["ENTER"], "type": "function", "command": "activate" },
-			{ "keys": ["DELETE", "BACKSPACE"], "type": "function", "command": "delete" },
-			{ "keys": [" "], "command": "todo toggle $n" },
-			{ "keys": ["tc"], "type": "function", "command": "toggle_console" },
-			{ "keys": ["tm"], "type": "function", "command": "toggle_metadata" },
-			{ "keys": ["/"], "type": "prompt", "command": "search \"\"", "cursorPosition": -2 },
-			{ "keys": ["mn"], "type": "prompt", "command": "mknote \"\"", "cursorPosition": -2 },
-			{ "keys": ["mt"], "type": "prompt", "command": "mktodo \"\"", "cursorPosition": -2 },
-			{ "keys": ["mb"], "type": "prompt", "command": "mkbook \"\"", "cursorPosition": -2 },
-			{ "keys": ["yn"], "type": "prompt", "command": "cp $n \"\"", "cursorPosition": -2 },
-			{ "keys": ["dn"], "type": "prompt", "command": "mv $n \"\"", "cursorPosition": -2 }
+			{ keys: [':'], type: 'function', command: 'enter_command_line_mode' },
+			{ keys: ['TAB'], type: 'function', command: 'focus_next' },
+			{ keys: ['SHIFT_TAB'], type: 'function', command: 'focus_previous' },
+			{ keys: ['UP'], type: 'function', command: 'move_up' },
+			{ keys: ['DOWN'], type: 'function', command: 'move_down' },
+			{ keys: ['PAGE_UP'], type: 'function', command: 'page_up' },
+			{ keys: ['PAGE_DOWN'], type: 'function', command: 'page_down' },
+			{ keys: ['ENTER'], type: 'function', command: 'activate' },
+			{ keys: ['DELETE', 'BACKSPACE'], type: 'function', command: 'delete' },
+			{ keys: [' '], command: 'todo toggle $n' },
+			{ keys: ['tc'], type: 'function', command: 'toggle_console' },
+			{ keys: ['tm'], type: 'function', command: 'toggle_metadata' },
+			{ keys: ['/'], type: 'prompt', command: 'search ""', cursorPosition: -2 },
+			{ keys: ['mn'], type: 'prompt', command: 'mknote ""', cursorPosition: -2 },
+			{ keys: ['mt'], type: 'prompt', command: 'mktodo ""', cursorPosition: -2 },
+			{ keys: ['mb'], type: 'prompt', command: 'mkbook ""', cursorPosition: -2 },
+			{ keys: ['yn'], type: 'prompt', command: 'cp $n ""', cursorPosition: -2 },
+			{ keys: ['dn'], type: 'prompt', command: 'mv $n ""', cursorPosition: -2 },
 		];
 
 		// Filter the keymap item by command so that items in keymap.json can override
@@ -340,10 +340,10 @@ class Application extends BaseApplication {
 		const itemsByCommand = {};
 
 		for (let i = 0; i < defaultKeyMap.length; i++) {
-			itemsByCommand[defaultKeyMap[i].command] = defaultKeyMap[i]
+			itemsByCommand[defaultKeyMap[i].command] = defaultKeyMap[i];
 		}
 
-		const filePath = Setting.value('profileDir') + '/keymap.json';
+		const filePath = `${Setting.value('profileDir')}/keymap.json`;
 		if (await fs.pathExists(filePath)) {
 			try {
 				let configString = await fs.readFile(filePath, 'utf-8');
@@ -355,16 +355,28 @@ class Application extends BaseApplication {
 				}
 			} catch (error) {
 				let msg = error.message ? error.message : '';
-				msg = 'Could not load keymap ' + filePath + '\n' + msg;
+				msg = `Could not load keymap ${filePath}\n${msg}`;
 				error.message = msg;
 				throw error;
 			}
 		}
 
 		const output = [];
-		for (let n in itemsByCommand) {
+		for (const n in itemsByCommand) {
 			if (!itemsByCommand.hasOwnProperty(n)) continue;
 			output.push(itemsByCommand[n]);
+		}
+
+		// Map reserved shortcuts to their equivalent key
+		// https://github.com/cronvel/terminal-kit/issues/101
+		for (let i = 0; i < output.length; i++) {
+			const newKeys = output[i].keys.map(k => {
+				k = k.replace(/CTRL_H/g, 'BACKSPACE');
+				k = k.replace(/CTRL_I/g, 'TAB');
+				k = k.replace(/CTRL_M/g, 'ENTER');
+				return k;
+			});
+			output[i].keys = newKeys;
 		}
 
 		return output;
@@ -373,11 +385,9 @@ class Application extends BaseApplication {
 	async start(argv) {
 		argv = await super.start(argv);
 
-		cliUtils.setStdout((object) => {
+		cliUtils.setStdout(object => {
 			return this.stdout(object);
 		});
-
-		await WelcomeUtils.install(this.dispatch.bind(this));
 
 		// If we have some arguments left at this point, it's a command
 		// so execute it.
@@ -385,6 +395,8 @@ class Application extends BaseApplication {
 			this.gui_ = this.dummyGui();
 
 			this.currentFolder_ = await Folder.load(Setting.value('activeFolderId'));
+
+			await this.applySettingsSideEffects();
 
 			try {
 				await this.execCommand(argv);
@@ -399,10 +411,11 @@ class Application extends BaseApplication {
 
 			await Setting.saveAll();
 
-			// Need to call exit() explicitely, otherwise Node wait for any timeout to complete
+			// Need to call exit() explicitly, otherwise Node wait for any timeout to complete
 			// https://stackoverflow.com/questions/18050095
 			process.exit(0);
-		} else { // Otherwise open the GUI
+		} else {
+			// Otherwise open the GUI
 			this.initRedux();
 
 			const keymap = await this.loadKeymaps();
@@ -423,6 +436,8 @@ class Application extends BaseApplication {
 
 			ResourceService.runInBackground();
 
+			RevisionService.instance().runInBackground();
+
 			this.dispatch({
 				type: 'TAG_UPDATE_ALL',
 				items: tags,
@@ -434,7 +449,6 @@ class Application extends BaseApplication {
 			});
 		}
 	}
-
 }
 
 let application_ = null;

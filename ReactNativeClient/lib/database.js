@@ -1,12 +1,8 @@
-const { uuid } = require('lib/uuid.js');
-const { promiseChain } = require('lib/promise-utils.js');
 const { Logger } = require('lib/logger.js');
 const { time } = require('lib/time-utils.js');
-const { sprintf } = require('sprintf-js');
 const Mutex = require('async-mutex').Mutex;
 
 class Database {
-
 	constructor(driver) {
 		this.debugMode_ = false;
 		this.driver_ = driver;
@@ -39,23 +35,28 @@ class Database {
 	}
 
 	async open(options) {
-		await this.driver().open(options);
+		try {
+			await this.driver().open(options);
+		} catch (error) {
+			throw new Error(`Cannot open database: ${error.message}: ${JSON.stringify(options)}`);
+		}
+
 		this.logger().info('Database was open successfully');
 	}
 
 	escapeField(field) {
 		if (field == '*') return '*';
-		let p = field.split('.');
-		if (p.length == 1) return '`' + field + '`';
-		if (p.length == 2) return p[0] + '.`' + p[1] + '`';
-		
-		throw new Error('Invalid field format: ' + field);
+		const p = field.split('.');
+		if (p.length == 1) return `\`${field}\``;
+		if (p.length == 2) return `${p[0]}.\`${p[1]}\``;
+
+		throw new Error(`Invalid field format: ${field}`);
 	}
 
 	escapeFields(fields) {
 		if (fields == '*') return '*';
 
-		let output = [];
+		const output = [];
 		for (let i = 0; i < fields.length; i++) {
 			output.push(this.escapeField(fields[i]));
 		}
@@ -73,7 +74,7 @@ class Database {
 		while (true) {
 			try {
 				this.logQuery(sql, params);
-				let result = await this.driver()[callName](sql, params);
+				const result = await this.driver()[callName](sql, params);
 				return result; // No exception was thrown
 			} catch (error) {
 				if (error && (error.code == 'SQLITE_IOERR' || error.code == 'SQLITE_BUSY')) {
@@ -105,7 +106,7 @@ class Database {
 		const output = [];
 		for (let i = 0; i < rows.length; i++) {
 			const v = rows[i][field];
-			if (!v) throw new Error('No such field: ' + field + '. Query was: ' + sql);
+			if (!v) throw new Error(`No such field: ${field}. Query was: ${sql}`);
 			output.push(rows[i][field]);
 		}
 		return output;
@@ -119,7 +120,7 @@ class Database {
 		if (queries.length <= 0) return;
 
 		if (queries.length == 1) {
-			let q = this.wrapQuery(queries[0]);
+			const q = this.wrapQuery(queries[0]);
 			await this.exec(q.sql, q.params);
 			return;
 		}
@@ -131,7 +132,7 @@ class Database {
 			await this.exec('BEGIN TRANSACTION');
 
 			for (let i = 0; i < queries.length; i++) {
-				let query = this.wrapQuery(queries[i]);
+				const query = this.wrapQuery(queries[i]);
 				await this.exec(query.sql, query.params);
 			}
 
@@ -152,15 +153,15 @@ class Database {
 		if (type == 'fieldType') {
 			if (s) s = s.toUpperCase();
 			if (s == 'INTEGER') s = 'INT';
-			if (!(('TYPE_' + s) in this)) throw new Error('Unkonwn fieldType: ' + s);
-			return this['TYPE_' + s];
+			if (!(`TYPE_${s}` in this)) throw new Error(`Unkonwn fieldType: ${s}`);
+			return this[`TYPE_${s}`];
 		}
 		if (type == 'syncTarget') {
 			if (s == 'memory') return 1;
 			if (s == 'filesystem') return 2;
 			if (s == 'onedrive') return 3;
 		}
-		throw new Error('Unknown enum type or value: ' + type + ', ' + s);
+		throw new Error(`Unknown enum type or value: ${type}, ${s}`);
 	}
 
 	static enumName(type, id) {
@@ -169,7 +170,7 @@ class Database {
 			if (id === Database.TYPE_INT) return 'int';
 			if (id === Database.TYPE_TEXT) return 'text';
 			if (id === Database.TYPE_NUMERIC) return 'numeric';
-			throw new Error('Invalid type id: ' + id);
+			throw new Error(`Invalid type id: ${id}`);
 		}
 	}
 
@@ -178,17 +179,17 @@ class Database {
 		if (type == this.TYPE_INT) return Number(value);
 		if (type == this.TYPE_TEXT) return value;
 		if (type == this.TYPE_NUMERIC) return Number(value);
-		throw new Error('Unknown type: ' + type);
+		throw new Error(`Unknown type: ${type}`);
 	}
 
 	sqlStringToLines(sql) {
-		let output = [];
-		let lines = sql.split("\n");
+		const output = [];
+		const lines = sql.split('\n');
 		let statement = '';
-		for (var i = 0; i < lines.length; i++) {
-			var line = lines[i];
+		for (let i = 0; i < lines.length; i++) {
+			const line = lines[i];
 			if (line == '') continue;
-			if (line.substr(0, 2) == "--") continue;
+			if (line.substr(0, 2) == '--') continue;
 			statement += line.trim();
 			if (line[line.length - 1] == ',') statement += ' ';
 			if (line[line.length - 1] == ';') {
@@ -214,20 +215,20 @@ class Database {
 	static insertQuery(tableName, data) {
 		if (!data || !Object.keys(data).length) throw new Error('Data is empty');
 
-		let keySql= '';
+		let keySql = '';
 		let valueSql = '';
-		let params = [];
-		for (let key in data) {
+		const params = [];
+		for (const key in data) {
 			if (!data.hasOwnProperty(key)) continue;
 			if (key[key.length - 1] == '_') continue;
 			if (keySql != '') keySql += ', ';
 			if (valueSql != '') valueSql += ', ';
-			keySql += '`' + key + '`';
+			keySql += `\`${key}\``;
 			valueSql += '?';
 			params.push(data[key]);
 		}
 		return {
-			sql: 'INSERT INTO `' + tableName + '` (' + keySql + ') VALUES (' + valueSql + ')',
+			sql: `INSERT INTO \`${tableName}\` (${keySql}) VALUES (${valueSql})`,
 			params: params,
 		};
 	}
@@ -236,43 +237,43 @@ class Database {
 		if (!data || !Object.keys(data).length) throw new Error('Data is empty');
 
 		let sql = '';
-		let params = [];
-		for (let key in data) {
+		const params = [];
+		for (const key in data) {
 			if (!data.hasOwnProperty(key)) continue;
 			if (key[key.length - 1] == '_') continue;
 			if (sql != '') sql += ', ';
-			sql += '`' + key + '`=?';
+			sql += `\`${key}\`=?`;
 			params.push(data[key]);
 		}
 
 		if (typeof where != 'string') {
-			let s = [];
-			for (let n in where) {
+			const s = [];
+			for (const n in where) {
 				if (!where.hasOwnProperty(n)) continue;
 				params.push(where[n]);
-				s.push('`' + n + '`=?');
+				s.push(`\`${n}\`=?`);
 			}
 			where = s.join(' AND ');
 		}
 
 		return {
-			sql: 'UPDATE `' + tableName + '` SET ' + sql + ' WHERE ' + where,
+			sql: `UPDATE \`${tableName}\` SET ${sql} WHERE ${where}`,
 			params: params,
 		};
 	}
 
 	alterColumnQueries(tableName, fields) {
-		let fieldsNoType = [];
-		for (let n in fields) {
+		const fieldsNoType = [];
+		for (const n in fields) {
 			if (!fields.hasOwnProperty(n)) continue;
 			fieldsNoType.push(n);
 		}
 
-		let fieldsWithType = [];
-		for (let n in fields) {
+		const fieldsWithType = [];
+		for (const n in fields) {
 			if (!fields.hasOwnProperty(n)) continue;
-			fieldsWithType.push(this.escapeField(n) + ' ' + fields[n]);
-		}		
+			fieldsWithType.push(`${this.escapeField(n)} ${fields[n]}`);
+		}
 
 		let sql = `
 			CREATE TEMPORARY TABLE _BACKUP_TABLE_NAME_(_FIELDS_TYPE_);
@@ -283,16 +284,16 @@ class Database {
 			DROP TABLE _BACKUP_TABLE_NAME_;
 		`;
 
-		sql = sql.replace(/_BACKUP_TABLE_NAME_/g, this.escapeField(tableName + '_backup'));
+		sql = sql.replace(/_BACKUP_TABLE_NAME_/g, this.escapeField(`${tableName}_backup`));
 		sql = sql.replace(/_TABLE_NAME_/g, this.escapeField(tableName));
 		sql = sql.replace(/_FIELDS_NO_TYPE_/g, this.escapeFields(fieldsNoType).join(','));
 		sql = sql.replace(/_FIELDS_TYPE_/g, fieldsWithType.join(','));
 
-		return sql.trim().split("\n");
+		return sql.trim().split('\n');
 	}
-	
+
 	wrapQueries(queries) {
-		let output = [];
+		const output = [];
 		for (let i = 0; i < queries.length; i++) {
 			output.push(this.wrapQuery(queries[i]));
 		}
@@ -300,10 +301,10 @@ class Database {
 	}
 
 	wrapQuery(sql, params = null) {
-		if (!sql) throw new Error('Cannot wrap empty string: ' + sql);
+		if (!sql) throw new Error(`Cannot wrap empty string: ${sql}`);
 
 		if (sql.constructor === Array) {
-			let output = {};
+			const output = {};
 			output.sql = sql[0];
 			output.params = sql.length >= 2 ? sql[1] : null;
 			return output;
@@ -313,7 +314,6 @@ class Database {
 			return sql; // Already wrapped
 		}
 	}
-
 }
 
 Database.TYPE_UNKNOWN = 0;

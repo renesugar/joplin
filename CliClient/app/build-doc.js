@@ -1,7 +1,7 @@
 const fs = require('fs-extra');
-const { fileExtension, basename, dirname } = require('lib/path-utils.js');
+const { fileExtension, dirname } = require('lib/path-utils.js');
 const wrap_ = require('word-wrap');
-const { _, setLocale, languageCode } = require('lib/locale.js');
+const { languageCode } = require('lib/locale.js');
 
 const rootDir = dirname(dirname(__dirname));
 const MAX_WIDTH = 78;
@@ -15,25 +15,25 @@ function wrap(text, indent) {
 }
 
 function renderOptions(options) {
-	let output = [];
+	const output = [];
 	const optionColWidth = getOptionColWidth(options);
 
 	for (let i = 0; i < options.length; i++) {
-		let option = options[i];
+		const option = options[i];
 		const flag = option[0];
 		const indent = INDENT + INDENT + ' '.repeat(optionColWidth + 2);
-		
+
 		let r = wrap(option[1], indent);
 		r = r.substr(flag.length + (INDENT + INDENT).length);
 		r = INDENT + INDENT + flag + r;
 		output.push(r);
 	}
 
-	return output.join("\n");
+	return output.join('\n');
 }
 
 function renderCommand(cmd) {
-	let output = [];
+	const output = [];
 	output.push(INDENT + cmd.usage());
 	output.push('');
 	output.push(wrap(cmd.description(), INDENT + INDENT));
@@ -44,18 +44,18 @@ function renderCommand(cmd) {
 		output.push('');
 		output.push(optionString);
 	}
-	return output.join("\n");
+	return output.join('\n');
 }
 
 function getCommands() {
-	let output = [];
-	fs.readdirSync(__dirname).forEach((path) => {
+	const output = [];
+	fs.readdirSync(__dirname).forEach(path => {
 		if (path.indexOf('command-') !== 0) return;
-		const ext = fileExtension(path)
+		const ext = fileExtension(path);
 		if (ext != 'js') return;
 
-		let CommandClass = require('./' + path);
-		let cmd = new CommandClass();
+		const CommandClass = require(`./${path}`);
+		const cmd = new CommandClass();
 		if (!cmd.enabled()) return;
 		if (cmd.hidden()) return;
 		output.push(cmd);
@@ -73,7 +73,7 @@ function getOptionColWidth(options) {
 }
 
 function getHeader() {
-	let output = [];
+	const output = [];
 
 	output.push('NAME');
 	output.push('');
@@ -84,56 +84,56 @@ function getHeader() {
 	output.push('DESCRIPTION');
 	output.push('');
 
-	let description = [];
+	const description = [];
 	description.push('Joplin is a note taking and to-do application, which can handle a large number of notes organised into notebooks.');
 	description.push('The notes are searchable, can be copied, tagged and modified with your own text editor.');
-	description.push("\n\n");
+	description.push('\n\n');
 	description.push('The notes can be synchronised with various target including the file system (for example with a network directory) or with Microsoft OneDrive.');
-	description.push("\n\n");
+	description.push('\n\n');
 	description.push('Notes exported from Evenotes via .enex files can be imported into Joplin, including the formatted content, resources (images, attachments, etc.) and complete metadata (geolocation, updated time, created time, etc.).');
 
 	output.push(wrap(description.join(''), INDENT));
 
-	return output.join("\n");
+	return output.join('\n');
 }
 
 function getFooter() {
-	let output = [];
+	const output = [];
 
 	output.push('WEBSITE');
 	output.push('');
-	output.push(INDENT + 'https://joplin.cozic.net');
+	output.push(`${INDENT}https://joplinapp.org`);
 
 	output.push('');
 
 	output.push('LICENSE');
 	output.push('');
-	let filePath = rootDir + '/LICENSE_' + languageCode();
-	if (!fs.existsSync(filePath)) filePath = rootDir + '/LICENSE';
+	let filePath = `${rootDir}/LICENSE_${languageCode()}`;
+	if (!fs.existsSync(filePath)) filePath = `${rootDir}/LICENSE`;
 	const licenseText = fs.readFileSync(filePath, 'utf8');
 	output.push(wrap(licenseText, INDENT));
 
-	return output.join("\n");
+	return output.join('\n');
 }
 
 async function main() {
 	// setLocale('fr_FR');
 
 	const commands = getCommands();
-	let commandBlocks = [];
+	const commandBlocks = [];
 
 	for (let i = 0; i < commands.length; i++) {
-		let cmd = commands[i];
+		const cmd = commands[i];
 		commandBlocks.push(renderCommand(cmd));
 	}
 
 	const headerText = getHeader();
-	const commandsText = commandBlocks.join("\n\n");
+	const commandsText = commandBlocks.join('\n\n');
 	const footerText = getFooter();
 
-	console.info(headerText + "\n\n" + 'USAGE' + "\n\n" + commandsText + "\n\n" + footerText);
+	console.info(`${headerText}\n\n` + 'USAGE' + `\n\n${commandsText}\n\n${footerText}`);
 }
 
-main().catch((error) => {
+main().catch(error => {
 	console.error(error);
 });

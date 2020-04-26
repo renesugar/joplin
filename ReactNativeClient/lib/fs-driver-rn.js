@@ -1,18 +1,22 @@
 const RNFS = require('react-native-fs');
 const FsDriverBase = require('lib/fs-driver-base');
+const RNFetchBlob = require('rn-fetch-blob').default;
 
 class FsDriverRN extends FsDriverBase {
-
-	appendFileSync(path, string) {
+	appendFileSync() {
 		throw new Error('Not implemented');
 	}
 
-	appendFile(path, string, encoding = 'base64') {
-		return RNFS.appendFile(path, string, encoding);
+	// Encoding can be either "utf8" or "base64"
+	appendFile(path, content, encoding = 'base64') {
+		return RNFS.appendFile(path, content, encoding);
 	}
 
-	writeFile(path, string, encoding = 'base64') {
-		return RNFS.writeFile(path, string, encoding);
+	// Encoding can be either "utf8" or "base64"
+	writeFile(path, content, encoding = 'base64') {
+		// We need to use rn-fetch-blob here due to this bug:
+		// https://github.com/itinance/react-native-fs/issues/700
+		return RNFetchBlob.fs.writeFile(path, content, encoding);
 	}
 
 	// same as rm -rf
@@ -20,7 +24,7 @@ class FsDriverRN extends FsDriverBase {
 		return await this.unlink(path);
 	}
 
-	writeBinaryFile(path, content) {
+	writeBinaryFile() {
 		throw new Error('Not implemented');
 	}
 
@@ -32,14 +36,20 @@ class FsDriverRN extends FsDriverBase {
 			isDirectory: () => stat.isDirectory(),
 			path: path,
 			size: stat.size,
-		};  
+		};
 	}
 
 	async readDirStats(path, options = null) {
 		if (!options) options = {};
 		if (!('recursive' in options)) options.recursive = false;
-		
-		let items = await RNFS.readDir(path);
+
+		let items = [];
+		try {
+			items = await RNFS.readDir(path);
+		} catch (error) {
+			throw new Error(`Could not read directory: ${path}: ${error.message}`);
+		}
+
 		let output = [];
 		for (let i = 0; i < items.length; i++) {
 			const item = items[i];
@@ -82,7 +92,7 @@ class FsDriverRN extends FsDriverBase {
 	// arguments but the function returns `false` and the timestamp is not set.
 	// Current setTimestamp is not really used so keep it that way, but careful if it
 	// becomes needed.
-	async setTimestamp(path, timestampDate) {
+	async setTimestamp() {
 		// return RNFS.touch(path, timestampDate, timestampDate);
 	}
 
@@ -96,10 +106,10 @@ class FsDriverRN extends FsDriverBase {
 			offset: 0,
 			mode: mode,
 			stat: stat,
-		}
+		};
 	}
 
-	close(handle) {
+	close() {
 		return null;
 	}
 
@@ -141,11 +151,11 @@ class FsDriverRN extends FsDriverBase {
 		}
 
 		if (!length) return null;
-		let output = await RNFS.read(handle.path, length, handle.offset, encoding);
+		const output = await RNFS.read(handle.path, length, handle.offset, encoding);
+		// eslint-disable-next-line require-atomic-updates
 		handle.offset += length;
 		return output ? output : null;
 	}
-
 }
 
 module.exports.FsDriverRN = FsDriverRN;

@@ -1,11 +1,12 @@
 const stringPadding = require('string-padding');
-const stringToStream = require('string-to-stream')
+const stringToStream = require('string-to-stream');
+const resourceUtils = require('lib/resourceUtils.js');
 
-const BLOCK_OPEN = "[[BLOCK_OPEN]]";
-const BLOCK_CLOSE = "[[BLOCK_CLOSE]]";
-const NEWLINE = "[[NEWLINE]]";
-const NEWLINE_MERGED = "[[MERGED]]";
-const SPACE = "[[SPACE]]";
+const BLOCK_OPEN = '[[BLOCK_OPEN]]';
+const BLOCK_CLOSE = '[[BLOCK_CLOSE]]';
+const NEWLINE = '[[NEWLINE]]';
+const NEWLINE_MERGED = '[[MERGED]]';
+const SPACE = '[[SPACE]]';
 
 function processMdArrayNewLines(md) {
 	while (md.length && md[0] == BLOCK_OPEN) {
@@ -18,7 +19,8 @@ function processMdArrayNewLines(md) {
 
 	let temp = [];
 	let last = '';
-	for (let i = 0; i < md.length; i++) { let v = md[i];
+	for (let i = 0; i < md.length; i++) {
+		const v = md[i];
 		if (isNewLineBlock(last) && isNewLineBlock(v) && last == v) {
 			// Skip it
 		} else {
@@ -28,11 +30,10 @@ function processMdArrayNewLines(md) {
 	}
 	md = temp;
 
-
-
 	temp = [];
-	last = "";
-	for (let i = 0; i < md.length; i++) { let v = md[i];
+	last = '';
+	for (let i = 0; i < md.length; i++) {
+		const v = md[i];
 		if (last == BLOCK_CLOSE && v == BLOCK_OPEN) {
 			temp.pop();
 			temp.push(NEWLINE_MERGED);
@@ -43,11 +44,10 @@ function processMdArrayNewLines(md) {
 	}
 	md = temp;
 
-
-
 	temp = [];
-	last = "";
-	for (let i = 0; i < md.length; i++) { let v = md[i];
+	last = '';
+	for (let i = 0; i < md.length; i++) {
+		const v = md[i];
 		if (last == NEWLINE && (v == NEWLINE_MERGED || v == BLOCK_CLOSE)) {
 			// Skip it
 		} else {
@@ -57,12 +57,11 @@ function processMdArrayNewLines(md) {
 	}
 	md = temp;
 
-
-
 	// NEW!!!
 	temp = [];
-	last = "";
-	for (let i = 0; i < md.length; i++) { let v = md[i];
+	last = '';
+	for (let i = 0; i < md.length; i++) {
+		const v = md[i];
 		if (last == NEWLINE && (v == NEWLINE_MERGED || v == BLOCK_OPEN)) {
 			// Skip it
 		} else {
@@ -71,9 +70,6 @@ function processMdArrayNewLines(md) {
 		last = v;
 	}
 	md = temp;
-
-
-
 
 	if (md.length > 2) {
 		if (md[md.length - 2] == NEWLINE_MERGED && md[md.length - 1] == NEWLINE) {
@@ -84,15 +80,16 @@ function processMdArrayNewLines(md) {
 	let output = '';
 	let previous = '';
 	let start = true;
-	for (let i = 0; i < md.length; i++) { let v = md[i];
+	for (let i = 0; i < md.length; i++) {
+		const v = md[i];
 		let add = '';
 		if (v == BLOCK_CLOSE || v == BLOCK_OPEN || v == NEWLINE || v == NEWLINE_MERGED) {
-			add = "\n";
+			add = '\n';
 		} else if (v == SPACE) {
-			if (previous == SPACE || previous == "\n" || start) {
+			if (previous == SPACE || previous == '\n' || start) {
 				continue; // skip
 			} else {
-				add = " ";
+				add = ' ';
 			}
 		} else {
 			add = v;
@@ -106,7 +103,7 @@ function processMdArrayNewLines(md) {
 
 	// To simplify the result, we only allow up to one empty line between blocks of text
 	const mergeMultipleNewLines = function(lines) {
-		let output = [];
+		const output = [];
 		let newlineCount = 0;
 		for (let i = 0; i < lines.length; i++) {
 			const line = lines[i];
@@ -121,10 +118,10 @@ function processMdArrayNewLines(md) {
 			output.push(line);
 		}
 		return output;
-	}
+	};
 
 	let lines = output.replace(/\\r/g, '').split('\n');
-	lines = formatMdLayout(lines)
+	lines = formatMdLayout(lines);
 	lines = mergeMultipleNewLines(lines);
 	return lines.join('\n');
 }
@@ -140,7 +137,7 @@ function processMdArrayNewLines(md) {
 //     <li>three</li>
 //
 // should result in this:
-// 
+//
 //     - one
 //     - two
 //     - three
@@ -152,9 +149,9 @@ function processMdArrayNewLines(md) {
 // should result in this:
 //
 //     Some long paragraph
-//     
+//
 //     And another one
-//    
+//
 //     And the last paragraph
 //
 // So in one case, one newline between tags, and in another two newlines. In HTML this would be done via CSS, but in Markdown we need
@@ -162,39 +159,39 @@ function processMdArrayNewLines(md) {
 // differently than if there's a newlines between them. So the function below parses the almost final MD and add new lines depending
 // on various rules.
 
-	const isHeading = function(line) {
-		return !!line.match(/^#+\s/);
-	}
+const isHeading = function(line) {
+	return !!line.match(/^#+\s/);
+};
 
-	const isListItem = function(line) {
-		return line && line.trim().indexOf('- ') === 0;
-	}
+const isListItem = function(line) {
+	return line && line.trim().indexOf('- ') === 0;
+};
 
-	const isCodeLine = function(line) {
-		return line && line.indexOf('\t') === 0; 
-	}
+const isCodeLine = function(line) {
+	return line && line.indexOf('\t') === 0;
+};
 
-	const isTableLine = function(line) {
-		return line.indexOf('| ') === 0;
-	}
+const isTableLine = function(line) {
+	return line.indexOf('| ') === 0;
+};
 
-	const isPlainParagraph = function(line) {
-		// Note: if a line is no longer than 80 characters, we don't consider it's a paragraph, which
-		// means no newlines will be added before or after. This is to handle text that has been
-		// written with "hard" new lines.
-		if (!line || line.length < 80) return false;
+const isPlainParagraph = function(line) {
+	// Note: if a line is no longer than 80 characters, we don't consider it's a paragraph, which
+	// means no newlines will be added before or after. This is to handle text that has been
+	// written with "hard" new lines.
+	if (!line || line.length < 80) return false;
 
-		if (isListItem(line)) return false;
-		if (isHeading(line)) return false;
-		if (isCodeLine(line)) return false;
-		if (isTableLine(line)) return false;
+	if (isListItem(line)) return false;
+	if (isHeading(line)) return false;
+	if (isCodeLine(line)) return false;
+	if (isTableLine(line)) return false;
 
-		return true; 
-	}
+	return true;
+};
 
-function formatMdLayout(lines) {	
+function formatMdLayout(lines) {
 	let previous = '';
-	let newLines = [];
+	const newLines = [];
 	for (let i = 0; i < lines.length; i++) {
 		const line = lines[i];
 
@@ -202,39 +199,35 @@ function formatMdLayout(lines) {
 		if (isListItem(previous) && line && !isListItem(line)) {
 			newLines.push('');
 
-		// Add a new line at the beginning of a list of items
+			// Add a new line at the beginning of a list of items
 		} else if (isListItem(line) && previous && !isListItem(previous)) {
 			newLines.push('');
 
-		// Add a new line before a heading
+			// Add a new line before a heading
 		} else if (isHeading(line) && previous) {
 			newLines.push('');
 
-		// Add a new line after a heading
+			// Add a new line after a heading
 		} else if (isHeading(previous) && line) {
 			newLines.push('');
-
 		} else if (isCodeLine(line) && !isCodeLine(previous)) {
 			newLines.push('');
-
 		} else if (!isCodeLine(line) && isCodeLine(previous)) {
 			newLines.push('');
-
 		} else if (isTableLine(line) && !isTableLine(previous)) {
 			newLines.push('');
-
 		} else if (!isTableLine(line) && isTableLine(previous)) {
 			newLines.push('');
-		
-		// Add a new line at beginning of paragraph
+
+			// Add a new line at beginning of paragraph
 		} else if (isPlainParagraph(line) && previous) {
 			newLines.push('');
 
-		// Add a new line at end of paragraph
+			// Add a new line at end of paragraph
 		} else if (isPlainParagraph(previous) && line) {
 			newLines.push('');
 		}
-	
+
 		newLines.push(line);
 		previous = newLines[newLines.length - 1];
 	}
@@ -252,8 +245,8 @@ function simplifyString(s) {
 	let output = '';
 	let previousWhite = false;
 	for (let i = 0; i < s.length; i++) {
-		let c = s[i];
-		let isWhite = isWhiteSpace(c);
+		const c = s[i];
+		const isWhite = isWhiteSpace(c);
 		if (previousWhite && isWhite) {
 			// skip
 		} else {
@@ -273,16 +266,16 @@ function collapseWhiteSpaceAndAppend(lines, state, text) {
 		lines.push(text);
 	} else {
 		// Remove all \n and \r from the left and right of the text
-		while (text.length && (text[0] == "\n" || text[0] == "\r")) text = text.substr(1);
-		while (text.length && (text[text.length - 1] == "\n" || text[text.length - 1] == "\r")) text = text.substr(0, text.length - 1);
+		while (text.length && (text[0] == '\n' || text[0] == '\r')) text = text.substr(1);
+		while (text.length && (text[text.length - 1] == '\n' || text[text.length - 1] == '\r')) text = text.substr(0, text.length - 1);
 
 		// Collapse all white spaces to just one. If there are spaces to the left and right of the string
 		// also collapse them to just one space.
-		let spaceLeft = text.length && text[0] == ' ';
-		let spaceRight = text.length && text[text.length - 1] == ' ';
+		const spaceLeft = text.length && text[0] == ' ';
+		const spaceRight = text.length && text[text.length - 1] == ' ';
 		text = simplifyString(text);
 
-		if (!spaceLeft && !spaceRight && text == "") return lines;
+		if (!spaceLeft && !spaceRight && text == '') return lines;
 
 		if (state.inQuote) {
 			// Add a ">" at the beginning of the block then at the beginning of each lines. So it turns this:
@@ -303,62 +296,67 @@ function collapseWhiteSpaceAndAppend(lines, state, text) {
 	return lines;
 }
 
-const imageMimeTypes = ["image/cgm", "image/fits", "image/g3fax", "image/gif", "image/ief", "image/jp2", "image/jpeg", "image/jpm", "image/jpx", "image/naplps", "image/png", "image/prs.btif", "image/prs.pti", "image/t38", "image/tiff", "image/tiff-fx", "image/vnd.adobe.photoshop", "image/vnd.cns.inf2", "image/vnd.djvu", "image/vnd.dwg", "image/vnd.dxf", "image/vnd.fastbidsheet", "image/vnd.fpx", "image/vnd.fst", "image/vnd.fujixerox.edmics-mmr", "image/vnd.fujixerox.edmics-rlc", "image/vnd.globalgraphics.pgb", "image/vnd.microsoft.icon", "image/vnd.mix", "image/vnd.ms-modi", "image/vnd.net-fpx", "image/vnd.sealed.png", "image/vnd.sealedmedia.softseal.gif", "image/vnd.sealedmedia.softseal.jpg", "image/vnd.svf", "image/vnd.wap.wbmp", "image/vnd.xiff"];
-
-function isImageMimeType(m) {
-	return imageMimeTypes.indexOf(m) >= 0;
+function tagAttributeToMdText(attr) {
+	// HTML attributes may contain newlines so remove them.
+	// https://github.com/laurent22/joplin/issues/1583
+	if (!attr) return '';
+	attr = attr.replace(/[\n\r]+/g, ' ');
+	attr = attr.replace(/\]/g, '\\]');
+	return attr;
 }
 
-function addResourceTag(lines, resource, alt = "") {
+function addResourceTag(lines, resource, alt = '') {
 	// Note: refactor to use Resource.markdownTag
 
-	let tagAlt = alt == "" ? resource.alt : alt;
-	if (!tagAlt) tagAlt = '';
-	if (isImageMimeType(resource.mime)) {
-		lines.push("![");
-		lines.push(tagAlt);
-		lines.push("](:/" + resource.id + ")");
+	if (!alt) alt = resource.title;
+	if (!alt) alt = resource.filename;
+	if (!alt) alt = '';
+
+	alt = tagAttributeToMdText(alt);
+	if (resourceUtils.isImageMimeType(resource.mime)) {
+		lines.push('![');
+		lines.push(alt);
+		lines.push(`](:/${resource.id})`);
 	} else {
-		lines.push("[");
-		lines.push(tagAlt);
-		lines.push("](:/" + resource.id + ")");
+		lines.push('[');
+		lines.push(alt);
+		lines.push(`](:/${resource.id})`);
 	}
 
 	return lines;
 }
 
-
 function isBlockTag(n) {
-	return ["div", "p", "dl", "dd", 'dt', "center", 'address'].indexOf(n) >= 0;
+	return ['div', 'p', 'dl', 'dd', 'dt', 'center', 'address'].indexOf(n) >= 0;
 }
 
 function isStrongTag(n) {
-	return n == "strong" || n == "b" || n == 'big';
+	return n == 'strong' || n == 'b' || n == 'big';
 }
 
 function isStrikeTag(n) {
-	return n == "strike" || n == "s" || n == 'del';
+	return n == 'strike' || n == 's' || n == 'del';
 }
 
 function isEmTag(n) {
-	return n == "em" || n == "i" || n == "u";
+	return n == 'em' || n == 'i' || n == 'u';
 }
 
 function isAnchor(n) {
-	return n == "a";
+	return n == 'a';
 }
 
 function isIgnoredEndTag(n) {
-	return ["en-note", "en-todo", "span", "body", "html", "font", "br", 'hr', 'tbody', 'sup', 'img', 'abbr', 'cite', 'thead', 'small', 'tt', 'sub', 'colgroup', 'col', 'ins', 'caption', 'var', 'map', 'area'].indexOf(n) >= 0;
+	return ['en-note', 'en-todo', 'body', 'html', 'font', 'br', 'hr', 'tbody', 'sup', 'img', 'abbr', 'cite', 'thead', 'small', 'tt', 'sub', 'colgroup', 'col', 'ins', 'caption', 'var', 'map', 'area'].indexOf(n) >= 0;
 }
 
 function isListTag(n) {
-	return n == "ol" || n == "ul";
+	return n == 'ol' || n == 'ul';
 }
 
 // Elements that don't require any special treatment beside adding a newline character
 function isNewLineOnlyEndTag(n) {
-	return ["div", "p", "li", "h1", "h2", "h3", "h4", "h5", 'h6', "dl", "dd", 'dt', "center", 'address'].indexOf(n) >= 0;
+	return ['div', 'p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'dl', 'dd', 'dt', 'center', 'address'].indexOf(n) >= 0;
 }
 
 function isInlineCodeTag(n) {
@@ -369,45 +367,70 @@ function isNewLineBlock(s) {
 	return s == BLOCK_OPEN || s == BLOCK_CLOSE;
 }
 
-function xmlNodeText(xmlNode) {
-	if (!xmlNode || !xmlNode.length) return '';
-	return xmlNode[0];
-}
-
 function attributeToLowerCase(node) {
 	if (!node.attributes) return {};
-	let output = {};
-	for (let n in node.attributes) {
+	const output = {};
+	for (const n in node.attributes) {
 		if (!node.attributes.hasOwnProperty(n)) continue;
 		output[n.toLowerCase()] = node.attributes[n];
 	}
 	return output;
 }
 
-function enexXmlToMdArray(stream, resources) {
-	let remainingResources = resources.slice();
+function isSpanWithStyle(attributes) {
+	if (attributes != undefined) {
+		if ('style' in attributes) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+}
 
-	const removeRemainingResource = (id) => {
+function isSpanStyleBold(attributes) {
+	const style = attributes.style;
+	if (style.includes('font-weight: bold;')) {
+		return true;
+	} else if (style.search(/font-family:.*,Bold.*;/) != -1) {
+		// console.debug('font-family regex matched');
+		return true;
+	} else {
+		// console.debug('Found unsupported style(s) in span tag: %s', style);
+		return false;
+	}
+}
+
+function isSpanStyleItalic(attributes) {
+	let style = attributes.style;
+	style = style.replace(/\s+/g, '');
+	return (style.toLowerCase().includes('font-style:italic;'));
+}
+
+function enexXmlToMdArray(stream, resources) {
+	const remainingResources = resources.slice();
+
+	const removeRemainingResource = id => {
 		for (let i = 0; i < remainingResources.length; i++) {
 			const r = remainingResources[i];
 			if (r.id === id) {
 				remainingResources.splice(i, 1);
 			}
 		}
-	}
+	};
 
-	return new Promise((resolve, reject) => {
-		let state = {
+	return new Promise((resolve) => {
+		const state = {
 			inCode: [],
 			inPre: false,
 			inQuote: false,
 			lists: [],
 			anchorAttributes: [],
+			spanAttributes: [],
 		};
 
-		let options = {};
-		let strict = false;
-		var saxStream = require('sax').createStream(strict, options)
+		const options = {};
+		const strict = false;
+		const saxStream = require('sax').createStream(strict, options);
 
 		let section = {
 			type: 'text',
@@ -417,17 +440,42 @@ function enexXmlToMdArray(stream, resources) {
 
 		saxStream.on('error', function(e) {
 			console.warn(e);
-		  //reject(e);
-		})
+		});
+
+		const unwrapInnerText = text => {
+			const lines = text.split('\n');
+
+			let output = '';
+
+			for (let i = 0; i < lines.length; i++) {
+				const line = lines[i];
+				const nextLine = i < lines.length - 1 ? lines[i + 1] : '';
+
+				if (!line) {
+					output += '\n';
+					continue;
+				}
+
+				if (nextLine) {
+					output += `${line} `;
+				} else {
+					output += line;
+				}
+			}
+
+			return output;
+		};
 
 		saxStream.on('text', function(text) {
 			if (['table', 'tr', 'tbody'].indexOf(section.type) >= 0) return;
+
+			text = !state.inPre ? unwrapInnerText(text) : text;
 			section.lines = collapseWhiteSpaceAndAppend(section.lines, state, text);
-		})
+		});
 
 		saxStream.on('opentag', function(node) {
 			const nodeAttributes = attributeToLowerCase(node);
-			let n = node.name.toLowerCase();
+			const n = node.name.toLowerCase();
 
 			const currentList = state.lists && state.lists.length ? state.lists[state.lists.length - 1] : null;
 
@@ -445,7 +493,7 @@ function enexXmlToMdArray(stream, resources) {
 			} else if (isBlockTag(n)) {
 				section.lines.push(BLOCK_OPEN);
 			} else if (n == 'table') {
-				let newSection = {
+				const newSection = {
 					type: 'table',
 					lines: [],
 					parent: section,
@@ -460,12 +508,12 @@ function enexXmlToMdArray(stream, resources) {
 					return;
 				}
 
-				let newSection = {
+				const newSection = {
 					type: 'tr',
 					lines: [],
 					parent: section,
 					isHeader: false,
-				}
+				};
 
 				section.lines.push(newSection);
 				section = newSection;
@@ -477,7 +525,7 @@ function enexXmlToMdArray(stream, resources) {
 
 				if (n == 'th') section.isHeader = true;
 
-				let newSection = {
+				const newSection = {
 					type: 'td',
 					lines: [],
 					parent: section,
@@ -491,20 +539,22 @@ function enexXmlToMdArray(stream, resources) {
 			} else if (n == 'li') {
 				section.lines.push(BLOCK_OPEN);
 				if (!state.lists.length) {
-					console.warn("Found <li> tag without being inside a list");
+					console.warn('Found <li> tag without being inside a list');
 					return;
 				}
 
-				let container = state.lists[state.lists.length - 1];
+				const container = state.lists[state.lists.length - 1];
 				container.startedText = false;
-				if (container.tag == "ul") {
-					section.lines.push("- ");
+
+				const indent = '    '.repeat(state.lists.length - 1);
+				if (container.tag == 'ul') {
+					section.lines.push(`${indent}- `);
 				} else {
-					section.lines.push(container.counter + '. ');
+					section.lines.push(`${indent + container.counter}. `);
 					container.counter++;
 				}
 			} else if (isStrongTag(n)) {
-				section.lines.push("**");
+				section.lines.push('**');
 			} else if (isStrikeTag(n)) {
 				section.lines.push('(');
 			} else if (isInlineCodeTag(n)) {
@@ -512,10 +562,11 @@ function enexXmlToMdArray(stream, resources) {
 			} else if (n == 'q') {
 				section.lines.push('"');
 			} else if (n == 'img') {
-				if (nodeAttributes.src) { // Many (most?) img tags don't have no source associated, especially when they were imported from HTML
+				if (nodeAttributes.src) {
+					// Many (most?) img tags don't have no source associated, especially when they were imported from HTML
 					let s = '![';
-					if (nodeAttributes.alt) s += nodeAttributes.alt;
-					s += '](' + nodeAttributes.src + ')';
+					if (nodeAttributes.alt) s += tagAttributeToMdText(nodeAttributes.alt);
+					s += `](${nodeAttributes.src})`;
 					section.lines.push(s);
 				}
 			} else if (isAnchor(n)) {
@@ -524,28 +575,34 @@ function enexXmlToMdArray(stream, resources) {
 				// are handled correctly.
 				collapseWhiteSpaceAndAppend(section.lines, state, '[');
 			} else if (isEmTag(n)) {
-				section.lines.push("*");
-			} else if (n == "en-todo") {
-				let x = nodeAttributes && nodeAttributes.checked && nodeAttributes.checked.toLowerCase() == 'true' ? 'X' : ' ';
-				section.lines.push('- [' + x + '] ');
-			} else if (n == "hr") {
+				section.lines.push('*');
+			} else if (n == 'en-todo') {
+				const x = nodeAttributes && nodeAttributes.checked && nodeAttributes.checked.toLowerCase() == 'true' ? 'X' : ' ';
+				section.lines.push(`- [${x}] `);
+			} else if (n == 'hr') {
 				// Needs to be surrounded by new lines so that it's properly rendered as a line when converting to HTML
 				section.lines.push(NEWLINE);
 				section.lines.push('* * *');
 				section.lines.push(NEWLINE);
 				section.lines.push(NEWLINE);
-			} else if (n == "h1") {
-				section.lines.push(BLOCK_OPEN); section.lines.push("# ");
-			} else if (n == "h2") {
-				section.lines.push(BLOCK_OPEN); section.lines.push("## ");
-			} else if (n == "h3") {
-				section.lines.push(BLOCK_OPEN); section.lines.push("### ");
-			} else if (n == "h4") {
-				section.lines.push(BLOCK_OPEN); section.lines.push("#### ");
-			} else if (n == "h5") {
-				section.lines.push(BLOCK_OPEN); section.lines.push("##### ");
-			} else if (n == "h6") {
-				section.lines.push(BLOCK_OPEN); section.lines.push("###### ");
+			} else if (n == 'h1') {
+				section.lines.push(BLOCK_OPEN);
+				section.lines.push('# ');
+			} else if (n == 'h2') {
+				section.lines.push(BLOCK_OPEN);
+				section.lines.push('## ');
+			} else if (n == 'h3') {
+				section.lines.push(BLOCK_OPEN);
+				section.lines.push('### ');
+			} else if (n == 'h4') {
+				section.lines.push(BLOCK_OPEN);
+				section.lines.push('#### ');
+			} else if (n == 'h5') {
+				section.lines.push(BLOCK_OPEN);
+				section.lines.push('##### ');
+			} else if (n == 'h6') {
+				section.lines.push(BLOCK_OPEN);
+				section.lines.push('###### ');
 			} else if (n == 'blockquote') {
 				section.lines.push(BLOCK_OPEN);
 				state.inQuote = true;
@@ -553,25 +610,25 @@ function enexXmlToMdArray(stream, resources) {
 				state.inCode.push(true);
 				state.currentCode = '';
 
-				let newSection = {
+				const newSection = {
 					type: 'code',
 					lines: [],
 					parent: section,
-				}
+				};
 
 				section.lines.push(newSection);
 				section = newSection;
 			} else if (n === 'pre') {
 				section.lines.push(BLOCK_OPEN);
 				state.inPre = true;
-			} else if (n == "br") {
+			} else if (n == 'br') {
 				section.lines.push(NEWLINE);
-			} else if (n == "en-media") {
+			} else if (n == 'en-media') {
 				const hash = nodeAttributes.hash;
 
 				let resource = null;
 				for (let i = 0; i < resources.length; i++) {
-					let r = resources[i];
+					const r = resources[i];
 					if (r.id == hash) {
 						resource = r;
 						removeRemainingResource(r.id);
@@ -620,7 +677,7 @@ function enexXmlToMdArray(stream, resources) {
 
 					let found = false;
 					for (let i = 0; i < remainingResources.length; i++) {
-						let r = remainingResources[i];
+						const r = remainingResources[i];
 						if (!r.id) {
 							resource = Object.assign({}, r);
 							resource.id = hash;
@@ -631,7 +688,7 @@ function enexXmlToMdArray(stream, resources) {
 					}
 
 					if (!found) {
-						console.warn('Hash with no associated resource: ' + hash);
+						console.warn(`Hash with no associated resource: ${hash}`);
 					}
 				}
 
@@ -641,12 +698,25 @@ function enexXmlToMdArray(stream, resources) {
 				if (resource && !!resource.id) {
 					section.lines = addResourceTag(section.lines, resource, nodeAttributes.alt);
 				}
-			} else if (["span", "font", 'sup', 'cite', 'abbr', 'small', 'tt', 'sub', 'colgroup', 'col', 'ins', 'caption', 'var', 'map', 'area'].indexOf(n) >= 0) {
+			} else if (n == 'span') {
+				if (isSpanWithStyle(nodeAttributes)) {
+					// console.debug('Found style(s) in span tag: %s', nodeAttributes.style);
+					state.spanAttributes.push(nodeAttributes);
+					if (isSpanStyleBold(nodeAttributes)) {
+						// console.debug('Applying style found in span tag: bold')
+						section.lines.push('**');
+					}
+					if (isSpanStyleItalic(nodeAttributes)) {
+						// console.debug('Applying style found in span tag: italic')
+						section.lines.push('*');
+					}
+				}
+			} else if (['font', 'sup', 'cite', 'abbr', 'small', 'tt', 'sub', 'colgroup', 'col', 'ins', 'caption', 'var', 'map', 'area'].indexOf(n) >= 0) {
 				// Inline tags that can be ignored in Markdown
 			} else {
-				console.warn("Unsupported start tag: " + n);
+				console.warn(`Unsupported start tag: ${n}`);
 			}
-		})
+		});
 
 		saxStream.on('closetag', function(n) {
 			n = n ? n.toLowerCase() : n;
@@ -667,13 +737,13 @@ function enexXmlToMdArray(stream, resources) {
 				section.lines.push(BLOCK_CLOSE);
 				state.lists.pop();
 			} else if (isStrongTag(n)) {
-				section.lines.push("**");
+				section.lines.push('**');
 			} else if (isStrikeTag(n)) {
 				section.lines.push(')');
 			} else if (isInlineCodeTag(n)) {
 				section.lines.push('`');
 			} else if (isEmTag(n)) {
-				section.lines.push("*");
+				section.lines.push('*');
 			} else if (n == 'q') {
 				section.lines.push('"');
 			} else if (n == 'blockquote') {
@@ -688,10 +758,10 @@ function enexXmlToMdArray(stream, resources) {
 					if (codeLines.length > 1) {
 						for (let i = 0; i < codeLines.length; i++) {
 							if (i > 0) section.lines.push('\n');
-							section.lines.push('\t' + codeLines[i]);
+							section.lines.push(`\t${codeLines[i]}`);
 						}
 					} else {
-						section.lines.push('`' + codeLines.join('') + '`');
+						section.lines.push(`\`${codeLines.join('')}\``);
 					}
 
 					if (section && section.parent) section = section.parent;
@@ -700,8 +770,8 @@ function enexXmlToMdArray(stream, resources) {
 				state.inPre = false;
 				section.lines.push(BLOCK_CLOSE);
 			} else if (isAnchor(n)) {
-				let attributes = state.anchorAttributes.pop();
-				let url = attributes && attributes.href ? attributes.href : '';
+				const attributes = state.anchorAttributes.pop();
+				const url = attributes && attributes.href ? attributes.href : '';
 
 				if (section.lines.length < 1) throw new Error('Invalid anchor tag closing'); // Sanity check, but normally not possible
 
@@ -748,7 +818,7 @@ function enexXmlToMdArray(stream, resources) {
 						section.lines.pop();
 					} else {
 						section.lines.push('(L)');
-						section.lines.push('](' + url + ')');
+						section.lines.push(`](${url})`);
 					}
 				} else if (!previous || previous == url) {
 					section.lines.pop();
@@ -775,10 +845,9 @@ function enexXmlToMdArray(stream, resources) {
 						for (let i = section.lines.length - 1; i >= 0; i--) {
 							const c = section.lines.pop();
 							if (c === '[') break;
-						}						
+						}
 						section.lines.push(url);
 					} else {
-
 						// Eg. converts:
 						//     [ Sign in   ](https://example.com)
 						// to:
@@ -802,7 +871,7 @@ function enexXmlToMdArray(stream, resources) {
 
 							for (let i = firstBracketIndex + 1; i < lines.length; i++) {
 								const l = lines[i];
-								if (l === SPACE || l === ' ' ||!l) {
+								if (l === SPACE || l === ' ' || !l) {
 									lines.splice(i, 1);
 								} else {
 									break;
@@ -810,36 +879,45 @@ function enexXmlToMdArray(stream, resources) {
 							}
 
 							return lines;
-						}
+						};
 
 						section.lines = trimTextStartAndEndSpaces(section.lines);
 
-						section.lines.push('](' + url + ')');
+						section.lines.push(`](${url})`);
 					}
 				}
 			} else if (isListTag(n)) {
 				section.lines.push(BLOCK_CLOSE);
 				state.lists.pop();
-			} else if (n == "en-media") {
+			} else if (n == 'en-media') {
 				// Skip
+			} else if (n == 'span') {
+				const attributes = state.spanAttributes.pop();
+				if (isSpanWithStyle(attributes)) {
+					if (isSpanStyleBold(attributes)) {
+						// console.debug('Applying style found in span tag (closing): bold')
+						section.lines.push('**');
+					}
+					if (isSpanStyleItalic(attributes)) {
+						// console.debug('Applying style found in span tag (closing): italic')
+						section.lines.push('*');
+					}
+				}
 			} else if (isIgnoredEndTag(n)) {
 				// Skip
 			} else {
-				console.warn("Unsupported end tag: " + n);
+				console.warn(`Unsupported end tag: ${n}`);
 			}
+		});
 
-		})
-
-		saxStream.on('attribute', function(attr) {
-			
-		})
+		saxStream.on('attribute', function() {});
 
 		saxStream.on('end', function() {
 			resolve({
 				content: section,
 				resources: remainingResources,
 			});
-		})
+		});
 
 		stream.pipe(saxStream);
 	});
@@ -849,7 +927,7 @@ function tableHasSubTables(table) {
 	for (let trIndex = 0; trIndex < table.lines.length; trIndex++) {
 		const tr = table.lines[trIndex];
 		if (!tr || !tr.lines) continue;
-		
+
 		for (let tdIndex = 0; tdIndex < tr.lines.length; tdIndex++) {
 			const td = tr.lines[tdIndex];
 			for (let i = 0; i < td.lines.length; i++) {
@@ -880,8 +958,8 @@ function drawTable(table) {
 	for (let trIndex = 0; trIndex < table.lines.length; trIndex++) {
 		const tr = table.lines[trIndex];
 		const isHeader = tr.isHeader;
-		let line = [];
-		let headerLine = [];
+		const line = [];
+		const headerLine = [];
 		let emptyHeader = null;
 		for (let tdIndex = 0; tdIndex < tr.lines.length; tdIndex++) {
 			const td = tr.lines[tdIndex];
@@ -896,15 +974,17 @@ function drawTable(table) {
 					const cellText = processMdArrayNewLines(currentCells);
 					line.push(cellText);
 					currentCells = [];
-				}
+				};
 
 				// In here, recursively render the tables
 				for (let i = 0; i < td.lines.length; i++) {
 					const c = td.lines[i];
-					if (typeof c === 'object' && ['table', 'td', 'tr', 'th'].indexOf(c.type) >= 0) { // This is a table
+					if (typeof c === 'object' && ['table', 'td', 'tr', 'th'].indexOf(c.type) >= 0) {
+						// This is a table
 						renderCurrentCells();
 						currentCells = currentCells.concat(drawTable(c));
-					} else { // This is plain text
+					} else {
+						// This is plain text
 						currentCells.push(c);
 					}
 				}
@@ -912,17 +992,18 @@ function drawTable(table) {
 				renderCurrentCells();
 
 				line.push(BLOCK_CLOSE);
-			} else { // Regular table rendering
+			} else {
+				// Regular table rendering
 
 				// A cell in a Markdown table cannot have actual new lines so replace
 				// them with <br>, which are supported by the markdown renderers.
-				let cellText = processMdArrayNewLines(td.lines, true)
+				let cellText = processMdArrayNewLines(td.lines, true);
 				let lines = cellText.split('\n');
 				lines = postProcessMarkdown(lines);
-				cellText = lines.join('\n').replace(/\n+/g, "<br>");
+				cellText = lines.join('\n').replace(/\n+/g, '<br>');
 
 				// Inside tables cells, "|" needs to be escaped
-				cellText = cellText.replace(/\|/g, "\\|");
+				cellText = cellText.replace(/\|/g, '\\|');
 
 				// Previously the width of the cell was as big as the content since it looks nicer, however that often doesn't work
 				// since the content can be very long, resulting in unreadable markdown. So no solution is perfect but making it a
@@ -934,12 +1015,11 @@ function drawTable(table) {
 				if (!headerDone) {
 					if (!isHeader) {
 						if (!emptyHeader) emptyHeader = [];
-						let h = stringPadding(' ', width, ' ', stringPadding.RIGHT);
+						const h = stringPadding(' ', width, ' ', stringPadding.RIGHT);
 						emptyHeader.push(h);
 					}
 					headerLine.push('-'.repeat(width));
 				}
-
 			}
 		}
 
@@ -950,15 +1030,15 @@ function drawTable(table) {
 			lines.push(BLOCK_CLOSE);
 		} else {
 			if (emptyHeader) {
-				lines.push('| ' + emptyHeader.join(' | ') + ' |');
-				lines.push('| ' + headerLine.join(' | ') + ' |');
+				lines.push(`| ${emptyHeader.join(' | ')} |`);
+				lines.push(`| ${headerLine.join(' | ')} |`);
 				headerDone = true;
 			}
 
-			lines.push('| ' + line.join(' | ') + ' |');
+			lines.push(`| ${line.join(' | ')} |`);
 
 			if (!headerDone) {
-				lines.push('| ' + headerLine.join(' | ') + ' |');
+				lines.push(`| ${headerLine.join(' | ')} |`);
 				headerDone = true;
 			}
 		}
@@ -966,7 +1046,7 @@ function drawTable(table) {
 
 	lines.push(BLOCK_CLOSE);
 
-	return flatRender ? lines : lines.join('<<<<:D>>>>' + NEWLINE + '<<<<:D>>>>').split('<<<<:D>>>>');
+	return flatRender ? lines : lines.join(`<<<<:D>>>>${NEWLINE}<<<<:D>>>>`).split('<<<<:D>>>>');
 }
 
 function postProcessMarkdown(lines) {
@@ -992,7 +1072,7 @@ function postProcessMarkdown(lines) {
 		}
 
 		return lines;
-	}
+	};
 
 	function cleanUpSpaces(lines) {
 		const output = [];
@@ -1003,10 +1083,10 @@ function postProcessMarkdown(lines) {
 			if (line.length) {
 				// eg. "    -   Some list item" => "    - Some list item"
 				// Note that spaces before the "-" are preserved
-				line = line.replace(/^(\s+|)-\s+/, '$1- ')
+				line = line.replace(/^(\s+|)-\s+/, '$1- ');
 
 				// eg "Some text     " => "Some text"
-				line = line.replace(/^(.*?)\s+$/, '$1')
+				line = line.replace(/^(.*?)\s+$/, '$1');
 			}
 
 			output.push(line);
@@ -1015,21 +1095,22 @@ function postProcessMarkdown(lines) {
 		return output;
 	}
 
-	lines = trimEmptyLines(lines)
-	lines = cleanUpSpaces(lines)
+	lines = trimEmptyLines(lines);
+	lines = cleanUpSpaces(lines);
 
 	return lines;
 }
 
 async function enexXmlToMd(xmlString, resources, options = {}) {
 	const stream = stringToStream(xmlString);
-	let result = await enexXmlToMdArray(stream, resources, options);
+	const result = await enexXmlToMdArray(stream, resources, options);
 
 	let mdLines = [];
 
 	for (let i = 0; i < result.content.lines.length; i++) {
-		let line = result.content.lines[i];
-		if (typeof line === 'object' && line.type === 'table') { // A table
+		const line = result.content.lines[i];
+		if (typeof line === 'object' && line.type === 'table') {
+			// A table
 			const table = line;
 			const tableLines = drawTable(table);
 			mdLines = mdLines.concat(tableLines);
@@ -1038,21 +1119,22 @@ async function enexXmlToMd(xmlString, resources, options = {}) {
 		} else if (typeof line === 'object') {
 			console.warn('Unhandled object type:', line);
 			mdLines = mdLines.concat(line.lines);
-		} else { // an actual line
+		} else {
+			// an actual line
 			mdLines.push(line);
 		}
 	}
 
 	let firstAttachment = true;
 	for (let i = 0; i < result.resources.length; i++) {
-		let r = result.resources[i];
+		const r = result.resources[i];
 		if (firstAttachment) mdLines.push(NEWLINE);
 		mdLines.push(NEWLINE);
 		mdLines = addResourceTag(mdLines, r, r.filename);
 		firstAttachment = false;
 	}
 
-	let output = processMdArrayNewLines(mdLines).split('\n')
+	let output = processMdArrayNewLines(mdLines).split('\n');
 
 	output = postProcessMarkdown(output);
 

@@ -1,7 +1,6 @@
 const { createStore, applyMiddleware } = require('redux');
 const { reducer, defaultState, stateUtils } = require('lib/reducer.js');
 const { JoplinDatabase } = require('lib/joplin-database.js');
-const { Database } = require('lib/database.js');
 const { FoldersScreenUtils } = require('lib/folders-screen-utils.js');
 const { DatabaseDriverNode } = require('lib/database-driver-node.js');
 const BaseModel = require('lib/BaseModel.js');
@@ -12,13 +11,12 @@ const Tag = require('lib/models/Tag.js');
 const Setting = require('lib/models/Setting.js');
 const { Logger } = require('lib/logger.js');
 const { splitCommandString } = require('lib/string-utils.js');
-const { sprintf } = require('sprintf-js');
 const { reg } = require('lib/registry.js');
 const { time } = require('lib/time-utils.js');
 const BaseSyncTarget = require('lib/BaseSyncTarget.js');
-const { fileExtension } = require('lib/path-utils.js');
 const { shim } = require('lib/shim.js');
-const { _, setLocale, defaultLocale, closestSupportedLocale } = require('lib/locale.js');
+const { uuid } = require('lib/uuid.js');
+const { _, setLocale } = require('lib/locale.js');
 const reduxSharedMiddleware = require('lib/components/shared/reduxSharedMiddleware');
 const os = require('os');
 const fs = require('fs-extra');
@@ -35,19 +33,16 @@ const SyncTargetDropbox = require('lib/SyncTargetDropbox.js');
 const EncryptionService = require('lib/services/EncryptionService');
 const ResourceFetcher = require('lib/services/ResourceFetcher');
 const SearchEngineUtils = require('lib/services/SearchEngineUtils');
+const RevisionService = require('lib/services/RevisionService');
+const ResourceService = require('lib/services/RevisionService');
 const DecryptionWorker = require('lib/services/DecryptionWorker');
 const BaseService = require('lib/services/BaseService');
 const SearchEngine = require('lib/services/SearchEngine');
-
-SyncTargetRegistry.addClass(SyncTargetFilesystem);
-SyncTargetRegistry.addClass(SyncTargetOneDrive);
-SyncTargetRegistry.addClass(SyncTargetOneDriveDev);
-SyncTargetRegistry.addClass(SyncTargetNextcloud);
-SyncTargetRegistry.addClass(SyncTargetWebDAV);
-SyncTargetRegistry.addClass(SyncTargetDropbox);
+const KvStore = require('lib/services/KvStore');
+const MigrationService = require('lib/services/MigrationService');
+const { toSystemSlashes } = require('lib/path-utils.js');
 
 class BaseApplication {
-
 	constructor() {
 		this.logger_ = new Logger();
 		this.dbLogger_ = new Logger();
@@ -57,6 +52,41 @@ class BaseApplication {
 		// be derived from the state and not set directly since that would make the
 		// state and UI out of sync.
 		this.currentFolder_ = null;
+
+		this.decryptionWorker_resourceMetadataButNotBlobDecrypted = this.decryptionWorker_resourceMetadataButNotBlobDecrypted.bind(this);
+	}
+
+	async destroy() {
+		if (this.scheduleAutoAddResourcesIID_) {
+			clearTimeout(this.scheduleAutoAddResourcesIID_);
+			this.scheduleAutoAddResourcesIID_ = null;
+		}
+		await ResourceFetcher.instance().destroy();
+		await SearchEngine.instance().destroy();
+		await DecryptionWorker.instance().destroy();
+		await FoldersScreenUtils.cancelTimers();
+		await BaseItem.revisionService_.cancelTimers();
+		await ResourceService.instance().cancelTimers();
+		await reg.cancelTimers();
+
+		this.eventEmitter_.removeAllListeners();
+		KvStore.instance_ = null;
+		BaseModel.setDb(null);
+		reg.setDb(null);
+
+		BaseItem.revisionService_ = null;
+		RevisionService.instance_ = null;
+		ResourceService.instance_ = null;
+		ResourceService.isRunningInBackground = false;
+		ResourceFetcher.instance_ = null;
+		EncryptionService.instance_ = null;
+		DecryptionWorker.instance_ = null;
+
+		this.logger_.info('Base application terminated...');
+		this.logger_ = null;
+		this.dbLogger_ = null;
+		this.eventEmitter_ = null;
+		this.decryptionWorker_resourceMetadataButNotBlobDecrypted = null;
 	}
 
 	logger() {
@@ -95,18 +125,24 @@ class BaseApplication {
 	// Handles the initial flags passed to main script and
 	// returns the remaining args.
 	async handleStartFlags_(argv, setDefaults = true) {
-		let matched = {};
+		const matched = {};
 		argv = argv.slice(0);
 		argv.splice(0, 2); // First arguments are the node executable, and the node JS file
 
 		while (argv.length) {
-			let arg = argv[0];
-			let nextArg = argv.length >= 2 ? argv[1] : null;
+			const arg = argv[0];
+			const nextArg = argv.length >= 2 ? argv[1] : null;
 
 			if (arg == '--profile') {
 				if (!nextArg) throw new JoplinError(_('Usage: %s', '--profile <dir-path>'), 'flagError');
 				matched.profileDir = nextArg;
 				argv.splice(0, 2);
+				continue;
+			}
+
+			if (arg == '--no-welcome') {
+				matched.welcomeDisabled = true;
+				argv.splice(0, 1);
 				continue;
 			}
 
@@ -124,7 +160,7 @@ class BaseApplication {
 			}
 
 			if (arg == '--open-dev-tools') {
-				Setting.setConstant('openDevTools', true);
+				Setting.setConstant('flagOpenDevTools', true);
 				argv.splice(0, 1);
 				continue;
 			}
@@ -156,6 +192,26 @@ class BaseApplication {
 				continue;
 			}
 
+			if (arg === '--enable-logging') {
+				// Electron-specific flag used for debugging - ignore it
+				argv.splice(0, 1);
+				continue;
+			}
+
+			if (arg.indexOf('--remote-debugging-port=') === 0) {
+				// Electron-specific flag used for debugging - ignore it. Electron expects this flag in '--x=y' form, a single string.
+				argv.splice(0, 1);
+				continue;
+			}
+
+			if (arg === '--no-sandbox') {
+				// Electron-specific flag for running the app without chrome-sandbox
+				// Allows users to use it as a workaround for the electron+AppImage issue
+				// https://github.com/laurent22/joplin/issues/2246
+				argv.splice(0, 1);
+				continue;
+			}
+
 			if (arg.length && arg[0] == '-') {
 				throw new JoplinError(_('Unknown flag: %s', arg), 'flagError');
 			} else {
@@ -183,7 +239,7 @@ class BaseApplication {
 		process.exit(code);
 	}
 
-	async refreshNotes(state, useSelectedNoteId = false) {
+	async refreshNotes(state, useSelectedNoteId = false, noteHash = '') {
 		let parentType = state.notesParentType;
 		let parentId = null;
 
@@ -196,11 +252,14 @@ class BaseApplication {
 		} else if (parentType === 'Search') {
 			parentId = state.selectedSearchId;
 			parentType = BaseModel.TYPE_SEARCH;
+		} else if (parentType === 'SmartFilter') {
+			parentId = state.selectedSmartFilterId;
+			parentType = BaseModel.TYPE_SMART_FILTER;
 		}
 
 		this.logger().debug('Refreshing notes:', parentType, parentId);
 
-		let options = {
+		const options = {
 			order: stateUtils.notesOrder(state.settings),
 			uncompletedTodosOnTop: Setting.value('uncompletedTodosOnTop'),
 			showCompletedTodos: Setting.value('showCompletedTodos'),
@@ -222,6 +281,8 @@ class BaseApplication {
 			} else if (parentType === BaseModel.TYPE_SEARCH) {
 				const search = BaseModel.byId(state.searches, parentId);
 				notes = await SearchEngineUtils.notesForQuery(search.query_pattern);
+			} else if (parentType === BaseModel.TYPE_SMART_FILTER) {
+				notes = await Note.previews(parentId, options);
 			}
 		}
 
@@ -235,6 +296,7 @@ class BaseApplication {
 			this.store().dispatch({
 				type: 'NOTE_SELECT',
 				id: state.selectedNoteIds && state.selectedNoteIds.length ? state.selectedNoteIds[0] : null,
+				hash: noteHash,
 			});
 		} else {
 			const lastSelectedNoteIds = stateUtils.lastSelectedNoteIds(state);
@@ -265,8 +327,18 @@ class BaseApplication {
 		}
 	}
 
+	resourceFetcher_downloadComplete(event) {
+		if (event.encrypted) {
+			DecryptionWorker.instance().scheduleStart();
+		}
+	}
+
+	async decryptionWorker_resourceMetadataButNotBlobDecrypted() {
+		ResourceFetcher.instance().scheduleAutoAddResources();
+	}
+
 	reducerActionToString(action) {
-		let o = [action.type];
+		const o = [action.type];
 		if ('id' in action) o.push(action.id);
 		if ('noteId' in action) o.push(action.noteId);
 		if ('folderId' in action) o.push(action.folderId);
@@ -286,15 +358,69 @@ class BaseApplication {
 	}
 
 	generalMiddlewareFn() {
-		const middleware = store => next => (action) => {
+		const middleware = store => next => action => {
 			return this.generalMiddleware(store, next, action);
-		}
+		};
 
 		return middleware;
 	}
 
+	async applySettingsSideEffects(action = null) {
+		const sideEffects = {
+			'dateFormat': async () => {
+				time.setLocale(Setting.value('locale'));
+				time.setDateFormat(Setting.value('dateFormat'));
+				time.setTimeFormat(Setting.value('timeFormat'));
+			},
+			'net.ignoreTlsErrors': async () => {
+				process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = Setting.value('net.ignoreTlsErrors') ? '0' : '1';
+			},
+			'net.customCertificates': async () => {
+				const caPaths = Setting.value('net.customCertificates').split(',');
+				for (let i = 0; i < caPaths.length; i++) {
+					const f = caPaths[i].trim();
+					if (!f) continue;
+					syswidecas.addCAs(f);
+				}
+			},
+			'encryption.enabled': async () => {
+				if (this.hasGui()) {
+					await EncryptionService.instance().loadMasterKeysFromSettings();
+					DecryptionWorker.instance().scheduleStart();
+					const loadedMasterKeyIds = EncryptionService.instance().loadedMasterKeyIds();
+
+					this.dispatch({
+						type: 'MASTERKEY_REMOVE_NOT_LOADED',
+						ids: loadedMasterKeyIds,
+					});
+
+					// Schedule a sync operation so that items that need to be encrypted
+					// are sent to sync target.
+					reg.scheduleSync();
+				}
+			},
+			'sync.interval': async () => {
+				if (this.hasGui()) reg.setupRecurrentSync();
+			},
+		};
+
+		sideEffects['timeFormat'] = sideEffects['dateFormat'];
+		sideEffects['locale'] = sideEffects['dateFormat'];
+		sideEffects['encryption.activeMasterKeyId'] = sideEffects['encryption.enabled'];
+		sideEffects['encryption.passwordCache'] = sideEffects['encryption.enabled'];
+
+		if (action) {
+			const effect = sideEffects[action.key];
+			if (effect) await effect();
+		} else {
+			for (const key in sideEffects) {
+				await sideEffects[key]();
+			}
+		}
+	}
+
 	async generalMiddleware(store, next, action) {
-		this.logger().debug('Reducer action', this.reducerActionToString(action));
+		// this.logger().debug('Reducer action', this.reducerActionToString(action));
 
 		const result = next(action);
 		const newState = store.getState();
@@ -302,12 +428,19 @@ class BaseApplication {
 		let refreshFolders = false;
 		// let refreshTags = false;
 		let refreshNotesUseSelectedNoteId = false;
+		let refreshNotesHash = '';
 
 		await reduxSharedMiddleware(store, next, action);
 
-		if (this.hasGui()  && ["NOTE_UPDATE_ONE", "NOTE_DELETE", "FOLDER_UPDATE_ONE", "FOLDER_DELETE"].indexOf(action.type) >= 0) {
-			if (!await reg.syncTarget().syncStarted()) reg.scheduleSync(30 * 1000, { syncSteps: ["update_remote", "delete_remote"] });
+		if (this.hasGui() && ['NOTE_UPDATE_ONE', 'NOTE_DELETE', 'FOLDER_UPDATE_ONE', 'FOLDER_DELETE'].indexOf(action.type) >= 0) {
+			if (!(await reg.syncTarget().syncStarted())) reg.scheduleSync(30 * 1000, { syncSteps: ['update_remote', 'delete_remote'] });
 			SearchEngine.instance().scheduleSyncTables();
+		}
+
+		// Don't add FOLDER_UPDATE_ALL as refreshFolders() is calling it too, which
+		// would cause the sidebar to refresh all the time.
+		if (this.hasGui() && ['FOLDER_UPDATE_ONE'].indexOf(action.type) >= 0) {
+			refreshFolders = true;
 		}
 
 		if (action.type == 'FOLDER_SELECT' || action.type === 'FOLDER_DELETE' || action.type === 'FOLDER_AND_NOTE_SELECT' || (action.type === 'SEARCH_UPDATE' && newState.notesParentType === 'Folder')) {
@@ -315,7 +448,10 @@ class BaseApplication {
 			this.currentFolder_ = newState.selectedFolderId ? await Folder.load(newState.selectedFolderId) : null;
 			refreshNotes = true;
 
-			if (action.type === 'FOLDER_AND_NOTE_SELECT') refreshNotesUseSelectedNoteId = true;
+			if (action.type === 'FOLDER_AND_NOTE_SELECT') {
+				refreshNotesUseSelectedNoteId = true;
+				refreshNotesHash = action.hash;
+			}
 		}
 
 		if (this.hasGui() && ((action.type == 'SETTING_UPDATE_ONE' && action.key == 'uncompletedTodosOnTop') || action.type == 'SETTING_UPDATE_ALL')) {
@@ -330,6 +466,11 @@ class BaseApplication {
 			refreshNotes = true;
 		}
 
+		if (action.type == 'SMART_FILTER_SELECT') {
+			refreshNotes = true;
+			refreshNotesUseSelectedNoteId = true;
+		}
+
 		if (action.type == 'TAG_SELECT' || action.type === 'TAG_DELETE') {
 			refreshNotes = true;
 		}
@@ -338,67 +479,33 @@ class BaseApplication {
 			refreshNotes = true;
 		}
 
-		// if (action.type == 'NOTE_DELETE') {
-		// 	refreshTags = true;
-		// }
+		if (action.type == 'NOTE_TAG_REMOVE') {
+			if (newState.notesParentType === 'Tag' && newState.selectedTagId === action.item.id) {
+				if (newState.notes.length === newState.selectedNoteIds.length) {
+					await this.refreshCurrentFolder();
+					refreshNotesUseSelectedNoteId = true;
+				}
+				refreshNotes = true;
+			}
+		}
 
 		if (refreshNotes) {
-			await this.refreshNotes(newState, refreshNotesUseSelectedNoteId);
+			await this.refreshNotes(newState, refreshNotesUseSelectedNoteId, refreshNotesHash);
 		}
 
-		// if (refreshTags) {
-		// 	this.dispatch({
-		// 		type: 'TAG_UPDATE_ALL',
-		// 		items: await Tag.allWithNotes(),
-		// 	});
-		// }
-
-		if ((action.type == 'SETTING_UPDATE_ONE' && (action.key == 'dateFormat' || action.key == 'timeFormat')) || (action.type == 'SETTING_UPDATE_ALL')) {
-			time.setDateFormat(Setting.value('dateFormat'));
-			time.setTimeFormat(Setting.value('timeFormat'));
-		}
-
-		if ((action.type == 'SETTING_UPDATE_ONE' && action.key == 'net.ignoreTlsErrors') || (action.type == 'SETTING_UPDATE_ALL')) {
-			// https://stackoverflow.com/questions/20082893/unable-to-verify-leaf-signature
-			process.env['NODE_TLS_REJECT_UNAUTHORIZED'] = Setting.value('net.ignoreTlsErrors') ? '0' : '1';
-		}
-
-		if ((action.type == 'SETTING_UPDATE_ONE' && action.key == 'net.customCertificates') || (action.type == 'SETTING_UPDATE_ALL')) {
-			const caPaths = Setting.value('net.customCertificates').split(',');
-			for (let i = 0; i < caPaths.length; i++) {
-				const f = caPaths[i].trim();
-				if (!f) continue;
-				syswidecas.addCAs(f);
-			}
-		}
-
-		if ((action.type == 'SETTING_UPDATE_ONE' && (action.key.indexOf('encryption.') === 0)) || (action.type == 'SETTING_UPDATE_ALL')) {
-			if (this.hasGui()) {
-				await EncryptionService.instance().loadMasterKeysFromSettings();
-				DecryptionWorker.instance().scheduleStart();
-				const loadedMasterKeyIds = EncryptionService.instance().loadedMasterKeyIds();
-
-				this.dispatch({
-					type: 'MASTERKEY_REMOVE_NOT_LOADED',
-					ids: loadedMasterKeyIds,
-				});
-
-				// Schedule a sync operation so that items that need to be encrypted
-				// are sent to sync target.
-				reg.scheduleSync();
-			}
-		}
-
-		if (action.type === 'NOTE_UPDATE_ONE') {
+		if (action.type === 'NOTE_UPDATE_ONE' || action.type === 'NOTE_DELETE') {
 			refreshFolders = true;
 		}
 
-		if (this.hasGui() && ((action.type == 'SETTING_UPDATE_ONE' && action.key.indexOf('folders.sortOrder') === 0) || action.type == 'SETTING_UPDATE_ALL')) {
+		if (this.hasGui() && action.type == 'SETTING_UPDATE_ALL') {
 			refreshFolders = 'now';
 		}
 
-		if (this.hasGui() && action.type == 'SETTING_UPDATE_ONE' && action.key == 'sync.interval' || action.type == 'SETTING_UPDATE_ALL') {
-			reg.setupRecurrentSync();
+		if (this.hasGui() && action.type == 'SETTING_UPDATE_ONE' && (
+			action.key.indexOf('folders.sortOrder') === 0 ||
+			action.key == 'showNoteCounts' ||
+			action.key == 'showCompletedTodos')) {
+			refreshFolders = 'now';
 		}
 
 		if (this.hasGui() && action.type === 'SYNC_GOT_ENCRYPTED_ITEM') {
@@ -406,7 +513,13 @@ class BaseApplication {
 		}
 
 		if (this.hasGui() && action.type === 'SYNC_CREATED_RESOURCE') {
-			ResourceFetcher.instance().queueDownload(action.id);
+			ResourceFetcher.instance().autoAddResources();
+		}
+
+		if (action.type == 'SETTING_UPDATE_ONE') {
+			await this.applySettingsSideEffects(action);
+		} else if (action.type == 'SETTING_UPDATE_ALL') {
+			await this.applySettingsSideEffects();
 		}
 
 		if (refreshFolders) {
@@ -416,8 +529,7 @@ class BaseApplication {
 				await FoldersScreenUtils.scheduleRefreshFolders();
 			}
 		}
-
-	  	return result;
+		return result;
 	}
 
 	dispatch(action) {
@@ -436,6 +548,16 @@ class BaseApplication {
 		BaseSyncTarget.dispatch = this.store().dispatch;
 		DecryptionWorker.instance().dispatch = this.store().dispatch;
 		ResourceFetcher.instance().dispatch = this.store().dispatch;
+	}
+
+	deinitRedux() {
+		this.store_ = null;
+		BaseModel.dispatch = function() {};
+		FoldersScreenUtils.dispatch = function() {};
+		reg.dispatch = function() {};
+		BaseSyncTarget.dispatch = function() {};
+		DecryptionWorker.instance().dispatch = function() {};
+		ResourceFetcher.instance().dispatch = function() {};
 	}
 
 	async readFlagsFromFile(flagPath) {
@@ -457,37 +579,13 @@ class BaseApplication {
 	determineProfileDir(initArgs) {
 		if (initArgs.profileDir) return initArgs.profileDir;
 
-		if (process && process.env && process.env.PORTABLE_EXECUTABLE_DIR) return process.env.PORTABLE_EXECUTABLE_DIR + '/JoplinProfile';
+		if (process && process.env && process.env.PORTABLE_EXECUTABLE_DIR) return `${process.env.PORTABLE_EXECUTABLE_DIR}/JoplinProfile`;
 
-		return os.homedir() + '/.config/' + Setting.value('appName');
+		return toSystemSlashes(`${os.homedir()}/.config/${Setting.value('appName')}`, 'linux');
 	}
-
-	async testing() {
-		const markdownUtils = require('lib/markdownUtils');
-		const ClipperServer = require('lib/ClipperServer');
-		const server = new ClipperServer();
-		const HtmlToMd = require('lib/HtmlToMd');
-		const service = new HtmlToMd();
-		const html = await shim.fsDriver().readFile('/mnt/d/test.html');
-		let markdown = service.parse(html, { baseUrl: 'https://duckduckgo.com/' });
-		console.info(markdown);
-		console.info('--------------------------------------------------');
-
-		const imageUrls = markdownUtils.extractImageUrls(markdown);
-		let result = await server.downloadImages_(imageUrls);
-		result = await server.createResourcesFromPaths_(result);
-		console.info(result);
-		markdown = server.replaceImageUrlsByResources_(markdown, result);
-		console.info('--------------------------------------------------');
-		console.info(markdown);
-		console.info('--------------------------------------------------');
-
-
-	}
-
 
 	async start(argv) {
-		let startFlags = await this.handleStartFlags_(argv);
+		const startFlags = await this.handleStartFlags_(argv);
 
 		argv = startFlags.argv;
 		let initArgs = startFlags.matched;
@@ -498,13 +596,23 @@ class BaseApplication {
 		Setting.setConstant('appName', appName);
 
 		const profileDir = this.determineProfileDir(initArgs);
-		const resourceDir = profileDir + '/resources';
-		const tempDir = profileDir + '/tmp';
+		const resourceDirName = 'resources';
+		const resourceDir = `${profileDir}/${resourceDirName}`;
+		const tempDir = `${profileDir}/tmp`;
 
 		Setting.setConstant('env', initArgs.env);
 		Setting.setConstant('profileDir', profileDir);
+		Setting.setConstant('templateDir', `${profileDir}/templates`);
+		Setting.setConstant('resourceDirName', resourceDirName);
 		Setting.setConstant('resourceDir', resourceDir);
 		Setting.setConstant('tempDir', tempDir);
+
+		SyncTargetRegistry.addClass(SyncTargetFilesystem);
+		SyncTargetRegistry.addClass(SyncTargetOneDrive);
+		if (Setting.value('env') === 'dev') SyncTargetRegistry.addClass(SyncTargetOneDriveDev);
+		SyncTargetRegistry.addClass(SyncTargetNextcloud);
+		SyncTargetRegistry.addClass(SyncTargetWebDAV);
+		SyncTargetRegistry.addClass(SyncTargetDropbox);
 
 		await shim.fsDriver().remove(tempDir);
 
@@ -512,38 +620,45 @@ class BaseApplication {
 		await fs.mkdirp(resourceDir, 0o755);
 		await fs.mkdirp(tempDir, 0o755);
 
-		const extraFlags = await this.readFlagsFromFile(profileDir + '/flags.txt');
+		// Clean up any remaining watched files (they start with "edit-")
+		await shim.fsDriver().removeAllThatStartWith(profileDir, 'edit-');
+
+		const extraFlags = await this.readFlagsFromFile(`${profileDir}/flags.txt`);
 		initArgs = Object.assign(initArgs, extraFlags);
 
-		this.logger_.addTarget('file', { path: profileDir + '/log.txt' });
-		// if (Setting.value('env') === 'dev') this.logger_.addTarget('console');
+		this.logger_.addTarget('file', { path: `${profileDir}/log.txt` });
+		if (Setting.value('env') === 'dev' && Setting.value('appType') === 'desktop') this.logger_.addTarget('console', { level: Logger.LEVEL_DEBUG });
 		this.logger_.setLevel(initArgs.logLevel);
 
 		reg.setLogger(this.logger_);
-		reg.dispatch = (o) => {};
+		reg.dispatch = () => {};
 
-		this.dbLogger_.addTarget('file', { path: profileDir + '/log-database.txt' });
+		this.dbLogger_.addTarget('file', { path: `${profileDir}/log-database.txt` });
 		this.dbLogger_.setLevel(initArgs.logLevel);
 
 		if (Setting.value('env') === 'dev') {
 			this.dbLogger_.setLevel(Logger.LEVEL_INFO);
 		}
 
-		this.logger_.info('Profile directory: ' + profileDir);
+		this.logger_.info(`Profile directory: ${profileDir}`);
 
 		this.database_ = new JoplinDatabase(new DatabaseDriverNode());
 		this.database_.setLogExcludedQueryTypes(['SELECT']);
 		this.database_.setLogger(this.dbLogger_);
-		await this.database_.open({ name: profileDir + '/database.sqlite' });
+		await this.database_.open({ name: `${profileDir}/database.sqlite` });
+
+		// if (Setting.value('env') === 'dev') await this.database_.clearForTesting();
 
 		reg.setDb(this.database_);
-		BaseModel.db_ = this.database_;
+		BaseModel.setDb(this.database_);
 
 		await Setting.load();
 
+		if (!Setting.value('clientId')) Setting.setValue('clientId', uuid.create());
+
 		if (Setting.value('firstStart')) {
 			const locale = shim.detectAndSetLocale(Setting);
-			reg.logger().info('First start: detected locale as ' + locale);
+			reg.logger().info(`First start: detected locale as ${locale}`);
 
 			if (Setting.value('env') === 'dev') {
 				Setting.setValue('showTrayIcon', 0);
@@ -556,39 +671,61 @@ class BaseApplication {
 			setLocale(Setting.value('locale'));
 		}
 
+		if (Setting.value('encryption.shouldReencrypt') < 0) {
+			// We suggest re-encryption if the user has at least one notebook
+			// and if encryption is enabled. This code runs only when shouldReencrypt = -1
+			// which can be set by a maintenance script for example.
+			const folderCount = await Folder.count();
+			const itShould = Setting.value('encryption.enabled') && !!folderCount ? Setting.SHOULD_REENCRYPT_YES : Setting.SHOULD_REENCRYPT_NO;
+			Setting.setValue('encryption.shouldReencrypt', itShould);
+		}
+
+		if ('welcomeDisabled' in initArgs) Setting.setValue('welcome.enabled', !initArgs.welcomeDisabled);
+
 		if (!Setting.value('api.token')) {
-			EncryptionService.instance().randomHexString(64).then((token) => {
-				Setting.setValue('api.token', token);
-			});
+			EncryptionService.instance()
+				.randomHexString(64)
+				.then(token => {
+					Setting.setValue('api.token', token);
+				});
 		}
 
 		time.setDateFormat(Setting.value('dateFormat'));
 		time.setTimeFormat(Setting.value('timeFormat'));
+
+		BaseItem.revisionService_ = RevisionService.instance();
+
+		KvStore.instance().setDb(reg.db());
 
 		BaseService.logger_ = this.logger_;
 		EncryptionService.instance().setLogger(this.logger_);
 		BaseItem.encryptionService_ = EncryptionService.instance();
 		DecryptionWorker.instance().setLogger(this.logger_);
 		DecryptionWorker.instance().setEncryptionService(EncryptionService.instance());
+		DecryptionWorker.instance().setKvStore(KvStore.instance());
 		await EncryptionService.instance().loadMasterKeysFromSettings();
+		DecryptionWorker.instance().on('resourceMetadataButNotBlobDecrypted', this.decryptionWorker_resourceMetadataButNotBlobDecrypted);
 
-		ResourceFetcher.instance().setFileApi(() => { return reg.syncTarget().fileApi() });
+		ResourceFetcher.instance().setFileApi(() => {
+			return reg.syncTarget().fileApi();
+		});
 		ResourceFetcher.instance().setLogger(this.logger_);
+		ResourceFetcher.instance().on('downloadComplete', this.resourceFetcher_downloadComplete);
 		ResourceFetcher.instance().start();
 
 		SearchEngine.instance().setDb(reg.db());
 		SearchEngine.instance().setLogger(reg.logger());
 		SearchEngine.instance().scheduleSyncTables();
 
-		let currentFolderId = Setting.value('activeFolderId');
+		const currentFolderId = Setting.value('activeFolderId');
 		let currentFolder = null;
 		if (currentFolderId) currentFolder = await Folder.load(currentFolderId);
 		if (!currentFolder) currentFolder = await Folder.defaultFolder();
 		Setting.setValue('activeFolderId', currentFolder ? currentFolder.id : '');
 
+		await MigrationService.instance().run();
 		return argv;
 	}
-
 }
 
 module.exports = { BaseApplication };

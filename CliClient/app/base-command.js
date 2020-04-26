@@ -2,7 +2,6 @@ const { _ } = require('lib/locale.js');
 const { reg } = require('lib/registry.js');
 
 class BaseCommand {
-
 	constructor() {
 		this.stdout_ = null;
 		this.prompt_ = null;
@@ -20,7 +19,7 @@ class BaseCommand {
 		throw new Error('Description not defined');
 	}
 
-	async action(args) {
+	async action() {
 		throw new Error('Action not defined');
 	}
 
@@ -51,7 +50,7 @@ class BaseCommand {
 	async cancel() {}
 
 	name() {
-		let r = this.usage().split(' ');
+		const r = this.usage().split(' ');
 		return r[0];
 	}
 
@@ -93,7 +92,6 @@ class BaseCommand {
 	logger() {
 		return reg.logger();
 	}
-
 }
 
 module.exports = { BaseCommand };

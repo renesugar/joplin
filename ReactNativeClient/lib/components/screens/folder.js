@@ -1,19 +1,17 @@
-const React = require('react'); const Component = React.Component;
-const { View, Button, TextInput, StyleSheet } = require('react-native');
+const React = require('react');
+
+const { View, TextInput, StyleSheet } = require('react-native');
 const { connect } = require('react-redux');
-const { ActionButton } = require('lib/components/action-button.js');
 const Folder = require('lib/models/Folder.js');
 const BaseModel = require('lib/BaseModel.js');
 const { ScreenHeader } = require('lib/components/screen-header.js');
-const { reg } = require('lib/registry.js');
 const { BaseScreenComponent } = require('lib/components/base-screen.js');
 const { dialogs } = require('lib/dialogs.js');
 const { themeStyle } = require('lib/components/global-style.js');
 const { _ } = require('lib/locale.js');
 
 class FolderScreenComponent extends BaseScreenComponent {
-	
-	static navigationOptions(options) {
+	static navigationOptions() {
 		return { header: null };
 	}
 
@@ -32,10 +30,11 @@ class FolderScreenComponent extends BaseScreenComponent {
 		if (this.styles_[this.props.theme]) return this.styles_[this.props.theme];
 		this.styles_ = {};
 
-		let styles = {
+		const styles = {
 			textInput: {
 				color: theme.color,
-				paddingLeft: 10,
+				paddingLeft: theme.marginLeft,
+				marginTop: theme.marginTop,
 			},
 		};
 
@@ -51,7 +50,7 @@ class FolderScreenComponent extends BaseScreenComponent {
 				lastSavedFolder: Object.assign({}, folder),
 			});
 		} else {
-			Folder.load(this.props.folderId).then((folder) => {
+			Folder.load(this.props.folderId).then(folder => {
 				this.setState({
 					folder: folder,
 					lastSavedFolder: Object.assign({}, folder),
@@ -62,16 +61,16 @@ class FolderScreenComponent extends BaseScreenComponent {
 
 	isModified() {
 		if (!this.state.folder || !this.state.lastSavedFolder) return false;
-		let diff = BaseModel.diffObjects(this.state.folder, this.state.lastSavedFolder);
+		const diff = BaseModel.diffObjects(this.state.folder, this.state.lastSavedFolder);
 		delete diff.type_;
 		return !!Object.getOwnPropertyNames(diff).length;
 	}
 
 	folderComponent_change(propName, propValue) {
-		this.setState((prevState, props) => {
-			let folder = Object.assign({}, prevState.folder);
+		this.setState((prevState) => {
+			const folder = Object.assign({}, prevState.folder);
 			folder[propName] = propValue;
-			return { folder: folder }
+			return { folder: folder };
 		});
 	}
 
@@ -102,32 +101,28 @@ class FolderScreenComponent extends BaseScreenComponent {
 	}
 
 	render() {
-		let saveButtonDisabled = !this.isModified();
+		const saveButtonDisabled = !this.isModified();
 		const theme = themeStyle(this.props.theme);
 
 		return (
 			<View style={this.rootStyle(this.props.theme).root}>
-				<ScreenHeader
-					title={_('Edit notebook')}
-					showSaveButton={true}
-					saveButtonDisabled={saveButtonDisabled}
-					onSaveButtonPress={() => this.saveFolderButton_press()}
+				<ScreenHeader title={_('Edit notebook')} showSaveButton={true} saveButtonDisabled={saveButtonDisabled} onSaveButtonPress={() => this.saveFolderButton_press()} showSideMenuButton={false} showSearchButton={false} />
+				<TextInput placeholder={_('Enter notebook title')} underlineColorAndroid={theme.strongDividerColor} selectionColor={theme.textSelectionColor} keyboardAppearance={theme.keyboardAppearance} style={this.styles().textInput} autoFocus={true} value={this.state.folder.title} onChangeText={text => this.title_changeText(text)} />
+				<dialogs.DialogBox
+					ref={dialogbox => {
+						this.dialogbox = dialogbox;
+					}}
 				/>
-				<TextInput underlineColorAndroid={theme.strongDividerColor} selectionColor={theme.textSelectionColor} style={this.styles().textInput} autoFocus={true} value={this.state.folder.title} onChangeText={(text) => this.title_changeText(text)} />
-				<dialogs.DialogBox ref={dialogbox => { this.dialogbox = dialogbox }}/>
 			</View>
 		);
 	}
-
 }
 
-const FolderScreen = connect(
-	(state) => {
-		return {
-			folderId: state.selectedFolderId,
-			theme: state.settings.theme,
-		};
-	}
-)(FolderScreenComponent)
+const FolderScreen = connect(state => {
+	return {
+		folderId: state.selectedFolderId,
+		theme: state.settings.theme,
+	};
+})(FolderScreenComponent);
 
 module.exports = { FolderScreen };

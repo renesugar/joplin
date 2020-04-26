@@ -1,17 +1,14 @@
 const fs = require('fs-extra');
 const { BaseCommand } = require('./base-command.js');
+const { splitCommandString } = require('lib/string-utils.js');
 const { uuid } = require('lib/uuid.js');
 const { app } = require('./app.js');
 const { _ } = require('lib/locale.js');
-const Folder = require('lib/models/Folder.js');
 const Note = require('lib/models/Note.js');
 const Setting = require('lib/models/Setting.js');
 const BaseModel = require('lib/BaseModel.js');
-const { cliUtils } = require('./cli-utils.js');
-const { time } = require('lib/time-utils.js');
 
 class Command extends BaseCommand {
-
 	usage() {
 		return 'edit <note>';
 	}
@@ -21,25 +18,24 @@ class Command extends BaseCommand {
 	}
 
 	async action(args) {
-		let watcher = null;
 		let tempFilePath = null;
 
 		const onFinishedEditing = async () => {
 			if (tempFilePath) fs.removeSync(tempFilePath);
-		}
+		};
 
 		const textEditorPath = () => {
 			if (Setting.value('editor')) return Setting.value('editor');
 			if (process.env.EDITOR) return process.env.EDITOR;
 			throw new Error(_('No text editor is defined. Please set it using `config editor <editor-path>`'));
-		}
+		};
 
-		try {		
+		try {
 			// -------------------------------------------------------------------------
 			// Load note or create it if it doesn't exist
 			// -------------------------------------------------------------------------
 
-			let title = args['note'];
+			const title = args['note'];
 
 			if (!app().currentFolder()) throw new Error(_('No active notebook.'));
 			let note = await app().loadItem(BaseModel.TYPE_NOTE, title);
@@ -58,14 +54,14 @@ class Command extends BaseCommand {
 			// -------------------------------------------------------------------------
 
 			let editorPath = textEditorPath();
-			let editorArgs = editorPath.split(' ');
+			let editorArgs = splitCommandString(editorPath);
 
 			editorPath = editorArgs[0];
 			editorArgs = editorArgs.splice(1);
 
 			const originalContent = await Note.serializeForEdit(note);
 
-			tempFilePath = Setting.value('tempDir') + '/' + uuid.create() + '.md';
+			tempFilePath = `${Setting.value('tempDir')}/${uuid.create()}.md`;
 			editorArgs.push(tempFilePath);
 
 			await fs.writeFile(tempFilePath, originalContent);
@@ -80,7 +76,7 @@ class Command extends BaseCommand {
 			await app().gui().forceRender();
 			const termState = app().gui().termSaveState();
 
-			const spawnSync	= require('child_process').spawnSync;
+			const spawnSync = require('child_process').spawnSync;
 			const result = spawnSync(editorPath, editorArgs, { stdio: 'inherit' });
 
 			if (result.error) this.stdout(_('Error opening note in editor: %s', result.error.message));
@@ -95,7 +91,7 @@ class Command extends BaseCommand {
 
 			const updatedContent = await fs.readFile(tempFilePath, 'utf8');
 			if (updatedContent !== originalContent) {
-				let updatedNote = await Note.unserializeForEdit(updatedContent);
+				const updatedNote = await Note.unserializeForEdit(updatedContent);
 				updatedNote.id = note.id;
 				await Note.save(updatedNote);
 				this.stdout(_('Note has been saved.'));
@@ -107,13 +103,11 @@ class Command extends BaseCommand {
 			});
 
 			await onFinishedEditing();
-
-		} catch(error) {
+		} catch (error) {
 			await onFinishedEditing();
 			throw error;
 		}
 	}
-
 }
 
 module.exports = Command;

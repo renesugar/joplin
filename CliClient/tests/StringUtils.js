@@ -1,7 +1,8 @@
+/* eslint-disable no-unused-vars */
+
 require('app-module-path').addPath(__dirname);
 
-const { time } = require('lib/time-utils.js');
-const { fileContentEqual, setupDatabase, setupDatabaseAndSynchronizer, db, synchronizer, fileApi, sleep, clearDatabase, switchClient, syncTargetId, objectsEqual, checkThrowAsync } = require('test-utils.js');
+const { asyncTest } = require('test-utils.js');
 const StringUtils = require('lib/string-utils');
 
 process.on('unhandledRejection', (reason, p) => {
@@ -14,7 +15,7 @@ describe('StringUtils', function() {
 		done();
 	});
 
-	it('should surround keywords with strings', async (done) => {
+	it('should surround keywords with strings', asyncTest(async () => {
 		const testCases = [
 			[[], 'test', 'a', 'b', 'test'],
 			[['test'], 'test', 'a', 'b', 'atestb'],
@@ -36,10 +37,27 @@ describe('StringUtils', function() {
 
 			const actual = StringUtils.surroundKeywords(keywords, input, prefix, suffix);
 
-			expect(actual).toBe(expected, 'Test case ' + i);
+			expect(actual).toBe(expected, `Test case ${i}`);
 		}
+	}));
 
-		done();
-	});
+	it('should find the next whitespace character', asyncTest(async () => {
+		const testCases = [
+			['', [[0, 0]]],
+			['Joplin', [[0, 6], [3, 6], [6, 6]]],
+			['Joplin is a free, open source\n note taking and *to-do* application', [[0, 6], [12, 17], [23, 29], [48, 54]]],
+		];
+
+		testCases.forEach((t, i) => {
+			const str = t[0];
+			t[1].forEach((pair, j) => {
+				const begin = pair[0];
+				const expected = pair[1];
+
+				const actual = StringUtils.nextWhitespaceIndex(str, begin);
+				expect(actual).toBe(expected, `Test string ${i} - case ${j}`);
+			});
+		});
+	}));
 
 });

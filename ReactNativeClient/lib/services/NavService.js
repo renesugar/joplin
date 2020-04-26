@@ -1,15 +1,14 @@
 class NavService {
-
 	static async go(routeName) {
 		if (this.handlers_.length) {
-			let r = await this.handlers_[this.handlers_.length - 1]();
+			const r = await this.handlers_[this.handlers_.length - 1]();
 			if (r) return r;
 		}
 
 		this.dispatch({
 			type: 'NAV_GO',
 			routeName: routeName,
-		});	
+		});
 	}
 
 	static addHandler(handler) {
@@ -27,7 +26,6 @@ class NavService {
 			if (h === hanlder) this.handlers_.splice(i, 1);
 		}
 	}
-
 }
 
 NavService.handlers_ = [];

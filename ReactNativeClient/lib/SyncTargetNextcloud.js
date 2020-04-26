@@ -4,11 +4,9 @@
 const BaseSyncTarget = require('lib/BaseSyncTarget.js');
 const { _ } = require('lib/locale.js');
 const Setting = require('lib/models/Setting.js');
-const { FileApi } = require('lib/file-api.js');
 const { Synchronizer } = require('lib/synchronizer.js');
-const WebDavApi = require('lib/WebDavApi');
 const SyncTargetWebDAV = require('lib/SyncTargetWebDAV');
-const { FileApiDriverWebDav } = require('lib/file-api-driver-webdav');
+const JoplinServerApi = require('lib/JoplinServerApi.js').default;
 
 class SyncTargetNextcloud extends BaseSyncTarget {
 
@@ -50,6 +48,24 @@ class SyncTargetNextcloud extends BaseSyncTarget {
 
 	async initSynchronizer() {
 		return new Synchronizer(this.db(), await this.fileApi(), Setting.value('appType'));
+	}
+
+	async appApi(settings = null) {
+		const useCache = !settings;
+
+		if (this.appApi_ && useCache) return this.appApi_;
+
+		const appApi = new JoplinServerApi({
+			baseUrl: () => JoplinServerApi.baseUrlFromNextcloudWebDavUrl(settings ? settings['sync.5.path'] : Setting.value('sync.5.path')),
+			username: () => settings ? settings['sync.5.username'] : Setting.value('sync.5.username'),
+			password: () => settings ? settings['sync.5.password'] : Setting.value('sync.5.password'),
+		});
+
+		appApi.setLogger(this.logger());
+
+		if (useCache) this.appApi_ = appApi;
+
+		return appApi;
 	}
 
 }

@@ -1,7 +1,6 @@
 const { BackHandler } = require('react-native');
 
 class BackButtonService {
-
 	static initialize(defaultHandler) {
 		this.defaultHandler_ = defaultHandler;
 
@@ -12,7 +11,7 @@ class BackButtonService {
 
 	static async back() {
 		if (this.handlers_.length) {
-			let r = await this.handlers_[this.handlers_.length - 1]();
+			const r = await this.handlers_[this.handlers_.length - 1]();
 			if (r) return r;
 		}
 
@@ -34,7 +33,6 @@ class BackButtonService {
 			if (h === hanlder) this.handlers_.splice(i, 1);
 		}
 	}
-
 }
 
 BackButtonService.defaultHandler_ = null;
